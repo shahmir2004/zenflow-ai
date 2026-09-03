@@ -10,8 +10,8 @@ evaluation. Nothing is recorded, and there is no account or database anywhere
 in the system.
 
 ```
-web/     Next.js 15 app        → Vercel   (root directory: web)
-server/  FastAPI yoga API      → Render   (rootDir: server)
+web/     Next.js 15 app        → Vercel
+server/  FastAPI yoga API      → Render   https://zenflow-api-mto8.onrender.com
 docs/    YOGA_API.md — the wire protocol, in full
 ```
 

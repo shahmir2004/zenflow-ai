@@ -2,8 +2,12 @@
 # https://render.com/docs/blueprint-spec
 #
 # Only the server half of this repo is deployed here; the Next.js app in web/
-# goes to Vercel. rootDir keeps Render's build scoped to server/, so nothing in
-# web/ can trigger or break a backend deploy.
+# goes to Vercel.
+#
+# This file mirrors the live service (zenflow-api-mto8) exactly, so recreating
+# from the Blueprint reproduces something known to work. The commands carry the
+# server/ prefix instead of using `rootDir: server` — see the note at the end
+# for the tighter alternative.
 
 services:
   - type: web
@@ -12,10 +16,8 @@ services:
     plan: free
     region: singapore
     branch: main
-    rootDir: server
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/yoga/health
+    buildCommand: pip install -r server/requirements.txt
+    startCommand: cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
@@ -26,8 +28,19 @@ services:
       # NOTHING — CORSMiddleware compares these as plain strings. Preview
       # deployments are covered by CORS_ORIGIN_REGEX below, not by this.
       - key: CORS_ORIGINS
-        value: "https://zenflow-ai.vercel.app,http://localhost:3000"
+        value: "https://zenflow-ai.vercel.app,http://localhost:3000,http://localhost:5173"
 
       # Vercel preview URLs: zenflow-ai-<hash>-<scope>.vercel.app
       - key: CORS_ORIGIN_REGEX
         value: "https://zenflow-ai-.*\.vercel\.app"
+
+# Optional, and worth doing once the service is settled: set Root Directory to
+# `server` in the dashboard, then simplify the two commands to
+#
+#   buildCommand: pip install -r requirements.txt
+#   startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+#
+# Render then scopes the build to server/, so a push touching only web/ no
+# longer redeploys the API — which matters here because a redeploy restarts the
+# process, and yoga session state lives in memory per WebSocket connection.
+# Also set Health Check Path to /api/yoga/health.

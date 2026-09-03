@@ -13,25 +13,32 @@ session that connects but never warms up.
 
 ## 1. Backend — Render
 
-The repo ships [`render.yaml`](../render.yaml) at its root, so the service can
-be created as a **Blueprint** and its configuration stays in version control
-rather than living in dashboard fields nobody can diff.
+**Already deployed:** https://zenflow-api-mto8.onrender.com
+([dashboard](https://dashboard.render.com/web/srv-dacrr83m8hqs73dpa980)) —
+free plan, Singapore, auto-deploys on push to `main`.
 
-**New → Blueprint → select this repo.** Render reads `render.yaml` and creates
-`zenflow-api` on the free plan with `rootDir: server`.
+To recreate it: **New → Blueprint → select this repo.** Render reads
+[`render.yaml`](../render.yaml), which mirrors the live service exactly.
 
-To create it by hand instead:
+By hand:
 
 | Field | Value |
 | --- | --- |
 | Runtime | Python 3 |
-| Root Directory | `server` |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| Health Check Path | `/api/yoga/health` |
+| Build Command | `pip install -r server/requirements.txt` |
+| Start Command | `cd server && uvicorn main:app --host 0.0.0.0 --port $PORT` |
 
-`rootDir: server` also means a push that only touches `web/` cannot trigger or
-break a backend deploy.
+### Worth tightening later
+
+The live service has no Root Directory set, so the commands carry the `server/`
+prefix themselves. Setting **Root Directory** to `server` in the dashboard lets
+you simplify them to `pip install -r requirements.txt` and
+`uvicorn main:app --host 0.0.0.0 --port $PORT` — and, more usefully, scopes the
+build so a push touching only `web/` stops redeploying the API. That matters
+here because a redeploy restarts the process, and yoga session state lives in
+memory per WebSocket connection: anyone mid-hold loses it.
+
+Set **Health Check Path** to `/api/yoga/health` at the same time.
 
 ### Environment
 
@@ -52,7 +59,7 @@ Verify with a real cross-origin request rather than by watching the socket:
 
 ```bash
 curl -si -H "Origin: https://<your-app>.vercel.app" \
-  https://zenflow-api.onrender.com/api/yoga/health | grep -i access-control
+  https://zenflow-api-mto8.onrender.com/api/yoga/health | grep -i access-control
 ```
 
 You want `access-control-allow-origin` echoing your origin back.
@@ -79,7 +86,7 @@ over-strictness fail identically from the user's side but need opposite fixes.
 
    | Name | Value |
    | --- | --- |
-   | `NEXT_PUBLIC_FORM_COACH_URL` | `https://zenflow-api.onrender.com` |
+   | `NEXT_PUBLIC_FORM_COACH_URL` | `https://zenflow-api-mto8.onrender.com` |
 
 5. Deploy.
 
@@ -89,7 +96,7 @@ Or from the CLI:
 cd web
 npx vercel link
 npx vercel env add NEXT_PUBLIC_FORM_COACH_URL production
-# paste: https://zenflow-api.onrender.com
+# paste: https://zenflow-api-mto8.onrender.com
 npx vercel --prod
 ```
 
@@ -124,15 +131,15 @@ blocks them all by default.
 
 ```bash
 # The API is awake and knows the poses.
-curl -s https://zenflow-api.onrender.com/api/yoga/poses | head -c 200
+curl -s https://zenflow-api-mto8.onrender.com/api/yoga/poses | head -c 200
 
 # CORS lets your origin read it.
 curl -si -H "Origin: https://<your-app>.vercel.app" \
-  https://zenflow-api.onrender.com/api/yoga/health | grep -i access-control-allow-origin
+  https://zenflow-api-mto8.onrender.com/api/yoga/health | grep -i access-control-allow-origin
 
 # Warm or cold?
 curl -w "%{time_total}s\n" -o /dev/null -s \
-  https://zenflow-api.onrender.com/api/yoga/health
+  https://zenflow-api-mto8.onrender.com/api/yoga/health
 ```
 
 Then in a browser:
