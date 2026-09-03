@@ -46,8 +46,8 @@ Set **Health Check Path** to `/api/yoga/health` at the same time.
 | --- | --- |
 | `PYTHON_VERSION` | `3.11` |
 | `DEBUG` | `false` |
-| `CORS_ORIGINS` | `https://web-kappa-liard.vercel.app,https://zenflow-ai.vercel.app,http://localhost:3000,http://localhost:5173` |
-| `CORS_ORIGIN_REGEX` | `https://(web|zenflow-ai)-[a-z0-9]+-[a-z0-9-]+\.vercel\.app` |
+| `CORS_ORIGINS` | `https://zenflow-coach.vercel.app,https://web-kappa-liard.vercel.app,http://localhost:3000,http://localhost:5173` |
+| `CORS_ORIGIN_REGEX` | `https://(zenflow-coach|web)-[a-z0-9]+-[a-z0-9-]+\.vercel\.app` |
 
 **Never put `https://*.vercel.app` in `CORS_ORIGINS`.** FastAPI's
 `CORSMiddleware` compares that list as exact strings, so a wildcard entry
@@ -81,10 +81,29 @@ over-strictness fail identically from the user's side but need opposite fixes.
 **Already deployed:** https://web-kappa-liard.vercel.app
 
 Vercel took the project name from the root directory, so the project is called
-`web` and the domain reads `web-kappa-liard.vercel.app`. Renaming the project
-to `zenflow-ai` in *Settings → General* gives `zenflow-ai.vercel.app`, which is
-a better thing to put on a slide. Both that domain and its preview pattern are
-already in the API's allow-list, so a rename needs no backend change.
+`web` and the domain reads `web-kappa-liard.vercel.app`.
+
+### Renaming it
+
+`.vercel.app` subdomains are **globally unique across every Vercel account**,
+not just yours. Renaming a project to a name whose subdomain is already taken
+succeeds — and silently leaves the old domain in place, because Vercel has
+nothing to give you. That is the failure mode to recognise: the rename "worked"
+but the URL never changed.
+
+`zenflow-ai.vercel.app` is taken, by an unrelated workflow-management product.
+`zenflow-coach.vercel.app` is free and is what the API's allow-list is set up
+for. Before renaming to anything else, check the subdomain is actually
+available:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}
+" https://<candidate>.vercel.app
+# 404 -> free   ·   200 -> already owned by someone
+```
+
+Then *Settings → General → Project Name*, and redeploy. The old domain stays
+allow-listed too, so nothing breaks while you switch.
 
 To set it up again from scratch:
 
