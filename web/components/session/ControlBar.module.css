@@ -1,0 +1,220 @@
+.bar {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  /* Sizes to its content up to the cap, rather than to whatever flexbox would
+     settle on with a shrinkable scroller inside — otherwise the chip row got
+     squeezed and clipped a pose even on a wide screen. */
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-md);
+}
+
+/* — mode segment — */
+
+.segment {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--segment-bg);
+}
+
+.segmentOption {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.22s ease, color 0.22s ease;
+}
+.segmentOption[data-active='true'] {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* — pose chips — */
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* min-width:0 lets this shrink inside the flex bar instead of forcing the
+     bar past the viewport; the scroll then only engages when it truly cannot
+     fit, rather than clipping a chip on a wide screen. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Fades at both edges so a scrolled-off chip reads as "there is more" rather
+     than as a hard cut. */
+  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  padding: 8px 13px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.22s ease, color 0.22s ease;
+}
+.chip:hover {
+  background: var(--segment-bg);
+}
+.chip[data-active='true'] {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* — flow progress — */
+
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-inline: 6px;
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dash {
+  height: 4px;
+  width: 8px;
+  border-radius: 999px;
+  background: var(--segment-bg);
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+.dash[data-state='current'] {
+  width: 26px;
+  background: var(--color-accent);
+}
+.dash[data-state='done'] {
+  background: var(--form-valid);
+}
+
+.nextUp {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* — actions — */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.iconButton {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--segment-bg);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background-color 0.22s ease, color 0.22s ease;
+}
+.iconButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent-700);
+}
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* Voice on is the state worth seeing at a glance from the mat. */
+.iconButton[data-on='true'] {
+  background: color-mix(in srgb, var(--form-valid) 30%, transparent);
+  color: var(--color-accent-2-800);
+}
+[data-surface='dark'] .iconButton[data-on='true'] {
+  color: var(--color-accent-2-100);
+}
+
+.end {
+  flex: none;
+  font-size: 13.5px;
+  padding: 11px 20px;
+}
+
+@media (max-width: 900px) {
+  .bar {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    /* `width: max-content` is what lets the bar size to its chips on a wide
+       screen; here the left/right anchors define the width instead, and
+       leaving it set would push the bar off the viewport. */
+    width: auto;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    border-radius: 26px;
+    gap: 8px;
+  }
+  /* Two rows: controls above, the pose row below. Explicit ordering, because
+     the wrap point differs between single and flow mode. */
+  .segment {
+    order: 1;
+  }
+  .actions {
+    order: 2;
+  }
+  .chips,
+  .flow {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .bar {
+    bottom: 16px;
+    padding: 10px;
+  }
+  .segmentOption {
+    padding: 6px 11px;
+    font-size: 11.5px;
+  }
+  .iconButton {
+    width: 36px;
+    height: 36px;
+  }
+  .end {
+    font-size: 12.5px;
+    padding: 10px 16px;
+  }
+}

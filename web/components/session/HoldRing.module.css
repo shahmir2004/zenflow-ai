@@ -1,0 +1,81 @@
+.ring {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-md);
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.track {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-width: 7;
+}
+
+.fill {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  /* Slightly slower than the 12fps feedback rate so the ring glides between
+     samples instead of stepping. */
+  transition: stroke-dashoffset 0.28s linear, stroke 0.4s ease;
+}
+.fill[data-complete='true'] {
+  stroke: var(--form-valid);
+}
+
+.readout {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  line-height: 1;
+  z-index: 1;
+}
+
+.seconds {
+  font-family: var(--font-heading);
+  font-size: 31px;
+  color: var(--ink);
+}
+
+.target {
+  font-size: 9px;
+  color: var(--ink-soft);
+}
+
+.countdown {
+  font-family: var(--font-heading);
+  font-size: 46px;
+  color: var(--color-accent);
+  line-height: 1;
+}
+
+@media (max-width: 700px) {
+  .ring {
+    width: 96px;
+    height: 96px;
+  }
+  .seconds {
+    font-size: 23px;
+  }
+  .countdown {
+    font-size: 34px;
+  }
+  .target {
+    font-size: 8px;
+  }
+}

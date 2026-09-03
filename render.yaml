@@ -1,0 +1,33 @@
+# Render Blueprint — ZenFlow AI yoga API
+# https://render.com/docs/blueprint-spec
+#
+# Only the server half of this repo is deployed here; the Next.js app in web/
+# goes to Vercel. rootDir keeps Render's build scoped to server/, so nothing in
+# web/ can trigger or break a backend deploy.
+
+services:
+  - type: web
+    name: zenflow-api
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/yoga/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: DEBUG
+        value: "false"
+
+      # Exact-match list. A wildcard entry here ("https://*.vercel.app") matches
+      # NOTHING — CORSMiddleware compares these as plain strings. Preview
+      # deployments are covered by CORS_ORIGIN_REGEX below, not by this.
+      - key: CORS_ORIGINS
+        value: "https://zenflow-ai.vercel.app,http://localhost:3000"
+
+      # Vercel preview URLs: zenflow-ai-<hash>-<scope>.vercel.app
+      - key: CORS_ORIGIN_REGEX
+        value: "https://zenflow-ai-.*\.vercel\.app"

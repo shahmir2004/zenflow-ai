@@ -1,0 +1,94 @@
+.cue {
+  position: absolute;
+  left: 50%;
+  bottom: 150px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(14px);
+  color: var(--ink-soft);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.kicker[data-kind='correcting'] {
+  background: var(--color-accent);
+  border-color: transparent;
+  color: var(--color-bg);
+}
+.kicker[data-kind='complete'] {
+  background: var(--form-valid);
+  border-color: transparent;
+  color: var(--color-neutral-900);
+}
+.kicker[data-kind='framing'] {
+  background: var(--color-accent-400);
+  border-color: transparent;
+  color: var(--color-accent-900);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.message {
+  margin: 0;
+  max-width: 20ch;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 42px;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  color: var(--ink);
+  /* The cue sits over the camera feed, so it carries its own ground with it.
+     The shadow token flips with the surface. */
+  text-shadow: var(--cue-shadow);
+}
+.message[data-kind='complete'] {
+  color: var(--form-valid);
+}
+
+/* The control bar wraps to two rows below 900px, so the cue has to clear a
+   taller bar than it does on desktop. */
+@media (max-width: 900px) {
+  .cue {
+    bottom: 172px;
+    gap: 10px;
+  }
+  .message {
+    font-size: 28px;
+    max-width: 18ch;
+  }
+}
+
+@media (max-width: 560px) {
+  .cue {
+    bottom: 164px;
+  }
+  .message {
+    font-size: 23px;
+  }
+}

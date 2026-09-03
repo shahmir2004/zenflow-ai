@@ -1,0 +1,9 @@
+# Normalise to LF in the repo. The app is developed on Windows but built on
+# Linux by both Vercel and Render, so committing CRLF would leak into the
+# containers that run it.
+* text=auto eol=lf
+
+# Binary
+*.png binary
+*.task binary
+*.wasm binary

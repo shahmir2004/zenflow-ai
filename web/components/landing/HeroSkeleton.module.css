@@ -1,0 +1,46 @@
+.root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.bone {
+  stroke: var(--color-accent-2-600);
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+/* The target shape the joints are finding. It reads as a soft body behind the
+   precise dots, which is what stops the figure looking like scattered points
+   on an empty disc — the disc has no photograph under it to do that job. */
+.ghost {
+  opacity: 0;
+}
+.ghost line {
+  stroke: var(--color-accent-300);
+  stroke-width: 11;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.joint {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px;
+  border-radius: 999px;
+  opacity: 0;
+  background: var(--color-accent-400);
+  /* The halo is the page ground itself, so a joint reads as punched out of
+     the disc rather than stuck on top of it. */
+  box-shadow: 0 0 0 3px var(--color-bg);
+}

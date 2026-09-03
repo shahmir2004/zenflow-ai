@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env*.local
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+.vercel
+
+# Copied from node_modules by scripts/copy-mediapipe-assets.mjs on postinstall.
+/public/mediapipe/
+/public/models/
+.gstack/

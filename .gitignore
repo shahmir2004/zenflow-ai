@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Node / Next.js  (web/ has its own .gitignore too)
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Deploy
+.vercel

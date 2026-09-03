@@ -1,0 +1,164 @@
+.intro {
+  padding-top: 40px;
+}
+
+.kicker {
+  color: var(--color-accent-700);
+  margin-bottom: 14px;
+}
+
+.title {
+  font-size: 46px;
+  line-height: 1.02;
+  max-width: 20ch;
+  margin: 0 0 16px;
+}
+
+.lede {
+  font-size: 16px;
+  max-width: 46ch;
+  margin: 0;
+  color: var(--color-neutral-700);
+}
+
+.scroller {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: 64px;
+  align-items: start;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  min-height: 74vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  opacity: 0.32;
+  transition: opacity 0.45s ease;
+}
+.step[data-active='true'] {
+  opacity: 1;
+}
+
+.number {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-size: 17px;
+  background: var(--color-surface);
+  color: var(--color-accent-700);
+  transition: background-color 0.45s ease, color 0.45s ease;
+}
+.step[data-active='true'] .number {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.meta {
+  font-size: 11px;
+}
+
+.stepTitle {
+  font-size: 38px;
+  line-height: 1.04;
+  margin: 0;
+  max-width: 16ch;
+}
+
+.stepBody {
+  font-size: 16.5px;
+  line-height: 1.6;
+  max-width: 40ch;
+  margin: 0;
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+/* The sticky element is the grid item itself. A grid item's containing block
+   is its grid area, which spans the full row — so it can travel the whole
+   section. `align-self: start` keeps the item its own height inside that area
+   rather than stretching to it, which is what gives the pin something to
+   travel through. */
+.stickyColumn {
+  position: sticky;
+  top: 12vh;
+  align-self: start;
+  height: 74vh;
+  display: flex;
+  align-items: center;
+}
+
+.sticky {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .title {
+    font-size: 34px;
+  }
+
+  /* The mock stays pinned on a phone — it is the payoff of the section, and
+     an unpinned version would show only whichever single region happened to
+     be lit when it scrolled past.
+     `display: contents` on the wrapper promotes `.sticky` to a direct child
+     of the flex container, so its containing block becomes the whole section
+     and it can travel the full scroll. That also keeps ONE element sticky at
+     every breakpoint, which is what the ScrollTrigger measures. */
+  .scroller {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* The desktop grid's `align-items: start` cascades in here, where the
+       cross axis is horizontal — it shrank the mock's column to zero width,
+       and the mock's own `width: 100%` then resolved against nothing. */
+    align-items: stretch;
+  }
+  /* Same element stays the sticky one; only its box changes. It moves above
+     the steps and is sized by the mock's own 4:3 ratio rather than a fixed
+     viewport fraction. */
+  .stickyColumn {
+    order: -1;
+    top: 8vh;
+    height: auto;
+    display: block;
+    align-self: auto;
+    z-index: 2;
+    margin-bottom: 26px;
+  }
+
+  .step {
+    min-height: 58vh;
+  }
+  .stepTitle {
+    font-size: 28px;
+  }
+  .stepBody {
+    font-size: 15.5px;
+  }
+}
+
+@media (max-width: 560px) {
+  .sticky {
+    top: 6vh;
+    height: 36vh;
+  }
+  .step {
+    min-height: 54vh;
+  }
+  .number {
+    width: 42px;
+    height: 42px;
+    font-size: 15px;
+  }
+}

@@ -1,0 +1,145 @@
+.hero {
+  position: relative;
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 26px var(--gutter) 96px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 56px;
+  align-items: center;
+}
+
+/* Ambient warmth behind the composition. Both are pointer-transparent and
+   sit under everything — they set the temperature of the page, nothing more. */
+.blob {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 0;
+}
+.blobAccent {
+  top: -160px;
+  right: -120px;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle at 50% 50%, var(--color-accent-200), transparent 70%);
+  --zf-duration: 26s;
+}
+.blobSage {
+  bottom: -180px;
+  left: -140px;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle at 50% 50%, var(--color-accent-2-200), transparent 70%);
+  --zf-duration: 34s;
+  --zf-direction: reverse;
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow {
+  font-size: 11.5px;
+  padding: 6px 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.headline {
+  font-size: 76px;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  margin: 22px 0 0;
+  max-width: 14ch;
+}
+.headline + .headline {
+  margin-top: 0;
+}
+.headlineAccent {
+  color: var(--color-accent-700);
+  max-width: 17ch;
+}
+
+.lede {
+  font-size: 18px;
+  line-height: 1.6;
+  max-width: 44ch;
+  margin: 26px 0 0;
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 34px;
+  flex-wrap: wrap;
+}
+.primaryCta {
+  font-size: 16px;
+  padding: 15px 30px;
+}
+.secondaryCta {
+  font-size: 16px;
+  padding: 15px 26px;
+  text-decoration: none;
+}
+
+/* A flat row of items and separators. Nesting the separator inside each item
+   made the row wrap with a dangling "·" at the start of the second line. */
+.trust {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 30px 0 0;
+  font-size: 13px;
+  color: var(--color-neutral-700);
+  flex-wrap: wrap;
+}
+.sep {
+  opacity: 0.4;
+}
+
+@media (max-width: 1080px) {
+  .headline {
+    font-size: 60px;
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 68px;
+    padding-bottom: 72px;
+  }
+  /* The column's vertical breath fights a stacked layout on a small screen,
+     where the shift is a larger share of what is visible. */
+  .copy {
+    animation: none;
+  }
+  .headline {
+    font-size: 44px;
+    max-width: 100%;
+  }
+  .lede {
+    font-size: 16.5px;
+  }
+  .trust {
+    gap: 14px;
+    font-size: 12.5px;
+  }
+  .trust > span {
+    gap: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding-inline: 22px;
+  }
+  .actions > * {
+    flex: 1 1 auto;
+  }
+}

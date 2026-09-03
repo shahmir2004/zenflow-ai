@@ -1,0 +1,195 @@
+.mock {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: 44px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background: var(--color-neutral-200);
+}
+
+/* Warm, not grey. This stands in for a camera view of a room, and the neutral
+   ramp alone reads as cold concrete against the page's cream ground. */
+.ground {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 34%, var(--color-neutral-100), transparent 62%),
+    linear-gradient(
+      168deg,
+      var(--color-accent-200),
+      var(--color-neutral-300) 60%,
+      var(--color-neutral-400)
+    );
+}
+
+/* The same vignette the live camera view carries, so the preview and the real
+   thing are recognisably the same surface. */
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 46%,
+    transparent 42%,
+    color-mix(in srgb, var(--color-neutral-600) 40%, transparent) 100%
+  );
+}
+
+/* Extra clearance at the bottom so the feet sit above the pose picker rather
+   than colliding with it when step 2 lights up. */
+.figure {
+  position: absolute;
+  top: 5%;
+  bottom: 15%;
+  left: 0;
+  right: 0;
+}
+
+.region {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+.region[data-lit='true'] {
+  opacity: 1;
+}
+
+/* — 1. framing — */
+
+.frameBox {
+  position: absolute;
+  inset: 7% 29%;
+  border: 2px dashed var(--color-accent-600);
+  border-radius: 28px;
+}
+
+.frameLabel {
+  position: absolute;
+  top: calc(7% - 24px);
+  left: 29%;
+  color: var(--color-accent-700);
+  font-size: 10px;
+}
+
+/* — 2. pose picker — */
+
+.picker {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+.chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-neutral-700);
+}
+.chip[data-active='true'] {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* — 3. hold ring + cue — */
+
+.holdRing {
+  position: absolute;
+  top: 8%;
+  right: 7%;
+  width: 104px;
+  height: 104px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+
+.ringSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.ringTrack {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-text) 12%, transparent);
+  stroke-width: 6;
+}
+.ringFill {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.ringReadout {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+.ringSeconds {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  color: var(--color-neutral-900);
+}
+.ringTarget {
+  font-size: 9px;
+  color: var(--color-neutral-700);
+}
+
+.cue {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 20%;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 27px;
+  line-height: 1.14;
+  color: var(--color-neutral-900);
+  text-wrap: balance;
+  /* The cue sits over the figure, so it carries the page ground with it. */
+  text-shadow: 0 2px 12px var(--color-bg), 0 0 26px var(--color-bg);
+}
+
+@media (max-width: 900px) {
+  .mock {
+    border-radius: 32px;
+  }
+  .cue {
+    font-size: 20px;
+    bottom: 22%;
+  }
+  .holdRing {
+    width: 78px;
+    height: 78px;
+  }
+  .ringSeconds {
+    font-size: 18px;
+  }
+  .chip {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}

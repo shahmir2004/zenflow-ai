@@ -1,0 +1,213 @@
+.centerpiece {
+  position: relative;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+/* Shared motion comes from the global .zf-* utilities (see globals.css); these
+   classes carry position and colour only. Per-ring phase offsets are passed as
+   --zf-delay so no two rings ever pulse in lockstep. */
+.ring {
+  position: absolute;
+  border-radius: 999px;
+}
+
+.ringOuter {
+  inset: 0;
+  border: 1px solid var(--color-accent-300);
+}
+
+.ringSage {
+  inset: 9%;
+  border: 1.5px solid var(--color-accent-2-400);
+  --zf-delay: -1s;
+}
+
+.discFill {
+  inset: 19%;
+  background: var(--color-accent-100);
+  --zf-delay: -0.6s;
+}
+
+.disc {
+  position: absolute;
+  inset: 25%;
+  --zf-delay: -0.3s;
+}
+
+.discGround {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background:
+    radial-gradient(circle at 38% 30%, var(--color-neutral-100), transparent 62%),
+    var(--color-accent-200);
+}
+
+.discEdge {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 6px var(--color-bg);
+  pointer-events: none;
+}
+
+.sweep {
+  position: absolute;
+  top: -9%;
+  left: -9%;
+  width: 118%;
+  height: 118%;
+  transform: rotate(-90deg);
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Local to this module, so the compiler hashes the keyframes and the reference
+   together and they stay in sync. 590.6 is the circumference at r=94. */
+.sweepStroke {
+  animation: zfRingSweep 14s cubic-bezier(0.3, 0.7, 0.2, 1) infinite;
+}
+
+@keyframes zfRingSweep {
+  0%, 30% { stroke-dashoffset: 590.6; }
+  62%, 92% { stroke-dashoffset: 0; }
+  97%, 100% { stroke-dashoffset: 590.6; }
+}
+
+/* Without the sweep running, the element rests on its markup attribute — an
+   empty ring. The settled state the handoff asks for is a *full* one, matching
+   the sage skeleton beside it. */
+@media (prefers-reduced-motion: reduce) {
+  .sweepStroke {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The figure box is wide enough that a standing skeleton reads as a body.
+   The SVG inside scales non-uniformly, so a narrow box squeezes the pose into
+   a vertical smear of dots rather than a person. */
+.figureBox {
+  position: absolute;
+  top: 4%;
+  bottom: 4%;
+  left: 6%;
+  right: 6%;
+  pointer-events: none;
+}
+
+.statusChip {
+  position: absolute;
+  left: -8%;
+  bottom: 8%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px 11px 13px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: 13.5px;
+  line-height: 1.2;
+  color: var(--color-neutral-800);
+  white-space: nowrap;
+  animation: zfCueIn 14s ease-in-out infinite;
+}
+
+@keyframes zfCueIn {
+  0%, 28% { opacity: 0; transform: translateY(8px); }
+  40%, 88% { opacity: 1; transform: translateY(0); }
+  95%, 100% { opacity: 0; transform: translateY(8px); }
+}
+
+.statusDot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-accent-2-500);
+}
+
+.breathChip {
+  position: absolute;
+  right: -4%;
+  top: 0;
+  z-index: 3;
+  text-align: center;
+  padding: 12px 20px;
+  border-radius: 26px;
+  background: var(--color-bg);
+}
+
+.breathLabels {
+  position: relative;
+  height: 34px;
+  width: 90px;
+}
+.breathLabels > span {
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 25px;
+  color: var(--color-accent-800);
+  /* Hidden by default so that if motion is switched off the three labels
+     cannot stack on top of each other — one is pinned visible below. */
+  opacity: 0;
+}
+/* Under reduced motion the cross-fade never runs, so name the phase the rings
+   rest on rather than showing all three or none. */
+@media (prefers-reduced-motion: reduce) {
+  .breathLabels > span:first-child {
+    opacity: 1;
+  }
+}
+
+.breathCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  color: var(--color-neutral-700);
+  margin-top: 5px;
+}
+
+.caption {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+
+@media (max-width: 900px) {
+  .centerpiece {
+    width: min(78vw, 380px);
+    margin: 0 auto;
+  }
+  .statusChip {
+    left: 50%;
+    bottom: -6%;
+    transform: translateX(-50%);
+    font-size: 12.5px;
+  }
+  /* At this size the breath chip collides with both the rings and the status
+     chip. The rings still pace the breath, so the label is the redundant half. */
+  .breathChip {
+    display: none;
+  }
+  .caption {
+    top: calc(100% + 34px);
+  }
+}

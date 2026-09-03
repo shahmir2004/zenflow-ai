@@ -1,0 +1,70 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The landmarks arrive in the raw (unmirrored) camera space, but the preview
+   is flipped so the user sees themselves in a mirror. The overlay flips with
+   it; the coordinates sent to the backend never do. */
+.overlay[data-mirrored='true'] {
+  transform: scaleX(-1);
+}
+
+.frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Reproduces `object-fit: cover`: the smallest box of the given aspect ratio
+   that still covers the viewport. Percentage coordinates inside it therefore
+   land on the same pixels the video painted. */
+.frame[data-fit='cover'] {
+  min-width: 100%;
+  min-height: 100%;
+}
+
+/* Letterboxed instead — the whole figure stays visible and undistorted at any
+   viewport shape. Correct only when there is no video underneath to match. */
+.frame[data-fit='contain'] {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+}
+
+.bones {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.bone {
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  opacity: 0.55;
+  transition: stroke 0.3s ease;
+}
+
+.joint {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  margin: -6.5px;
+  border-radius: 999px;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 700px) {
+  .joint {
+    width: 10px;
+    height: 10px;
+    margin: -5px;
+  }
+}

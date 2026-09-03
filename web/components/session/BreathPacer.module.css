@@ -1,0 +1,31 @@
+.pacer {
+  display: flex;
+  justify-content: center;
+}
+
+.labels {
+  position: relative;
+  height: 20px;
+  width: 120px;
+}
+
+.labels > span {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0;
+}
+
+/* Without the cross-fade running, all three phases would stack. Name the one
+   the pacer rests on instead. */
+@media (prefers-reduced-motion: reduce) {
+  .labels > span:first-child {
+    opacity: 1;
+  }
+}

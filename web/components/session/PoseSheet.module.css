@@ -1,0 +1,169 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--color-neutral-900) 42%, transparent);
+}
+
+.panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  bottom: 20px;
+  z-index: 21;
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 34px;
+  border-radius: 44px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.close {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+.close:hover {
+  background: var(--color-accent-200);
+}
+
+.name {
+  font-size: 31px;
+  line-height: 1.05;
+  margin: 6px 0 0;
+}
+
+.sanskrit {
+  margin: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--color-neutral-600);
+}
+
+.plate {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 32px;
+  background: var(--color-surface);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.stat {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--color-surface);
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--color-neutral-700);
+}
+
+.statValue {
+  font-family: var(--font-heading);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.description {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+.cuesHeading {
+  margin: 10px 0 2px;
+  color: var(--color-accent-700);
+}
+
+.cues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cues li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--color-neutral-800);
+}
+.cues li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-accent-2-500);
+}
+
+.sideNote {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: var(--color-accent-100);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-accent-800);
+}
+
+.hold {
+  width: 100%;
+  margin-top: auto;
+  padding-top: 15px;
+  padding-bottom: 15px;
+  font-size: 15px;
+  /* Pushed clear of the content above it even when the panel scrolls. */
+  margin-block-start: 24px;
+}
+
+@media (max-width: 700px) {
+  /* A 400px side panel on a phone is the whole screen anyway, so it becomes a
+     bottom sheet — reachable with a thumb, and it keeps the camera visible
+     above it. */
+  .panel {
+    top: auto;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    max-width: none;
+    max-height: 88vh;
+    border-radius: 34px;
+    padding: 26px 22px;
+  }
+}
