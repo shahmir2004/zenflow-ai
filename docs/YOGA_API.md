@@ -3,8 +3,8 @@
 Everything needed to build a **yoga-only** form-checking client against this backend, with no
 dependency on the exercise/rep-counting pipeline.
 
-- Production base: `https://exercise-form-backend.onrender.com`
-- Production WebSocket: `wss://exercise-form-backend.onrender.com/api/ws/yoga/{client_id}`
+- Production base: `https://zenflow-api-mto8.onrender.com`
+- Production WebSocket: `wss://zenflow-api-mto8.onrender.com/api/ws/yoga/{client_id}`
 - Local base: `http://localhost:8000`
 - Local WebSocket: `ws://localhost:8000/api/ws/yoga/{client_id}`
 
@@ -315,7 +315,7 @@ overlay lines up.
 ```ts
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
-const BASE = "https://exercise-form-backend.onrender.com";
+const BASE = "https://zenflow-api-mto8.onrender.com";
 const WS_BASE = BASE.replace(/^http/, "ws");
 const TARGET_FPS = 12;
 
@@ -477,8 +477,8 @@ Add your standalone app's origin to the backend's `CORS_ORIGINS` (comma-separate
 dashboard, or set `CORS_ORIGIN_REGEX` for preview deployments:
 
 ```env
-CORS_ORIGINS=https://your-yoga-app.vercel.app,http://localhost:3000
-CORS_ORIGIN_REGEX=https://your-yoga-app-.*\.vercel\.app
+CORS_ORIGINS=https://web-kappa-liard.vercel.app,http://localhost:3000
+CORS_ORIGIN_REGEX=https://web-[a-z0-9]+-[a-z0-9-]+\.vercel\.app
 ```
 
 The defaults in `backend/config/settings.py` already cover `http://localhost:3000`,
@@ -515,19 +515,38 @@ Plus the shared server settings (`HOST`, `PORT`, `DEBUG`, `CORS_ORIGINS`, `CORS_
 
 ### Running only the yoga mode
 
-The yoga router is mounted independently in `backend/main.py`:
+**This repo is that extraction** — `server/` mounts the yoga router and nothing else.
+What follows is what the split actually took, because an earlier version of this
+section understated it.
 
-```python
-app.include_router(yoga_router, prefix="/api")
-```
+The claim was that the yoga pipeline "imports only `config.settings`, `exercises.base`
+(geometry helpers), `exercises.yoga_poses`, `exercises.yoga_registry`,
+`pipeline.hold_timer` and `state_machine.yoga_manager`". That is true of the **symbols**
+and false of the **modules**. Four eager imports pull the exercise pipeline back in
+regardless of what any yoga module names:
 
-To ship a yoga-only deployment, drop the `api_router` and `upload_router` lines and the
-`/uploads` static mount. The yoga pipeline imports only `config.settings`,
-`exercises.base` (geometry helpers), `exercises.yoga_poses`, `exercises.yoga_registry`,
-`pipeline.hold_timer`, and `state_machine.yoga_manager` — none of the HMM, Kalman,
-feature-extraction, rep-counting, or upload modules. That also lets you cut `scipy` from
-`requirements.txt`; `numpy`, `fastapi`, `uvicorn`, `pydantic`, and `pydantic-settings` are
-enough.
+| File | What it dragged in |
+| --- | --- |
+| `exercises/base.py` | `from pipeline.rep_counter import ...` at module level, for `BaseExercise` — a class no yoga pose uses |
+| `exercises/__init__.py` | `squat`, `pushup`, `bicep_curl` |
+| `state_machine/__init__.py` | `FormManager`, and through it the HMM/k-NN classifier |
+| `api/__init__.py` | the exercise and chunked-upload routers |
+
+So the split is: trim `base.py` to geometry only (`JointName`, `Landmark`,
+`calculate_angle`, `landmarks_to_dict` — everything above `BaseExercise`), empty those
+three `__init__.py` files, and mount only `yoga_router` in `main.py`. `rep_counter.py`
+then does not need to ship at all.
+
+Miss any one of the four and everything still works — the server just quietly loads a
+classifier it never calls. `server/tests/test_slim_server.py` is what notices; it
+imports the app in a clean interpreter and asserts none of it reached `sys.modules`.
+
+On dependencies: `numpy`, `fastapi`, `uvicorn`, `pydantic` and `pydantic-settings` are
+enough, and dropping `scipy`, `supabase`, `aiofiles` and `python-multipart` removes
+~117 MB from the install. Worth knowing that **`scipy` is never imported anywhere in the
+upstream backend** — `grep -rn "import scipy"` finds nothing. It was a declared
+dependency for code that does not exist, so removing it costs nothing and saves the
+largest single item in the build.
 
 ---
 
@@ -561,9 +580,9 @@ adjust. Poses fail in two directions worth naming:
 
 ## 9. Testing
 
-```powershell
-cd "D:\work\FYP FINAL\form-checking-backend\backend"
-pytest tests\test_yoga_poses.py tests\test_yoga_ws.py tests\test_hold_timer.py -q
+```bash
+cd server
+pytest -q     # pose detection, hold timing, WebSocket, extraction guards
 ```
 
 Yoga coverage: per-pose detection against synthetic skeletons, `HoldTimer` debounce/latch

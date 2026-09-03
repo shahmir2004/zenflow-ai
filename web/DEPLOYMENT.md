@@ -46,8 +46,8 @@ Set **Health Check Path** to `/api/yoga/health` at the same time.
 | --- | --- |
 | `PYTHON_VERSION` | `3.11` |
 | `DEBUG` | `false` |
-| `CORS_ORIGINS` | `https://<your-app>.vercel.app,http://localhost:3000` |
-| `CORS_ORIGIN_REGEX` | `https://<your-app>-.*\.vercel\.app` |
+| `CORS_ORIGINS` | `https://web-kappa-liard.vercel.app,https://zenflow-ai.vercel.app,http://localhost:3000,http://localhost:5173` |
+| `CORS_ORIGIN_REGEX` | `https://(web|zenflow-ai)-[a-z0-9]+-[a-z0-9-]+\.vercel\.app` |
 
 **Never put `https://*.vercel.app` in `CORS_ORIGINS`.** FastAPI's
 `CORSMiddleware` compares that list as exact strings, so a wildcard entry
@@ -58,7 +58,7 @@ nothing. `CORS_ORIGIN_REGEX` is the one that works — see
 Verify with a real cross-origin request rather than by watching the socket:
 
 ```bash
-curl -si -H "Origin: https://<your-app>.vercel.app" \
+curl -si -H "Origin: https://web-kappa-liard.vercel.app" \
   https://zenflow-api-mto8.onrender.com/api/yoga/health | grep -i access-control
 ```
 
@@ -78,6 +78,16 @@ over-strictness fail identically from the user's side but need opposite fixes.
 
 ## 2. Frontend — Vercel
 
+**Already deployed:** https://web-kappa-liard.vercel.app
+
+Vercel took the project name from the root directory, so the project is called
+`web` and the domain reads `web-kappa-liard.vercel.app`. Renaming the project
+to `zenflow-ai` in *Settings → General* gives `zenflow-ai.vercel.app`, which is
+a better thing to put on a slide. Both that domain and its preview pattern are
+already in the API's allow-list, so a rename needs no backend change.
+
+To set it up again from scratch:
+
 1. **New Project** → import this repository.
 2. **Root Directory: `web`.** This matters — the repo root is not the app.
 3. Framework preset **Next.js** (detected); build command and output are the
@@ -87,6 +97,10 @@ over-strictness fail identically from the user's side but need opposite fixes.
    | Name | Value |
    | --- | --- |
    | `NEXT_PUBLIC_FORM_COACH_URL` | `https://zenflow-api-mto8.onrender.com` |
+
+   Changing this later needs a **redeploy**, not just a save: `NEXT_PUBLIC_*`
+   variables are inlined into the client bundle at build time, so an existing
+   deployment keeps the old value until it is rebuilt.
 
 5. Deploy.
 
@@ -134,7 +148,7 @@ blocks them all by default.
 curl -s https://zenflow-api-mto8.onrender.com/api/yoga/poses | head -c 200
 
 # CORS lets your origin read it.
-curl -si -H "Origin: https://<your-app>.vercel.app" \
+curl -si -H "Origin: https://web-kappa-liard.vercel.app" \
   https://zenflow-api-mto8.onrender.com/api/yoga/health | grep -i access-control-allow-origin
 
 # Warm or cold?

@@ -9,11 +9,18 @@ MediaPipe; only 33 anonymous joint coordinates per frame are sent for
 evaluation. Nothing is recorded, and there is no account or database anywhere
 in the system.
 
+**Live:** https://web-kappa-liard.vercel.app
+
 ```
-web/     Next.js 15 app        → Vercel
+web/     Next.js 15 app        → Vercel   https://web-kappa-liard.vercel.app
 server/  FastAPI yoga API      → Render   https://zenflow-api-mto8.onrender.com
 docs/    YOGA_API.md — the wire protocol, in full
 ```
+
+The API sleeps after ~15 minutes idle, so open `/` first — the landing page
+pings it on mount and the wake-up happens while you read. Straight to
+`/session` on a cold API means waiting. `/session?preview=1` needs neither the
+API nor a camera.
 
 ## How it fits together
 

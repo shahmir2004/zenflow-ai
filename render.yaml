@@ -28,11 +28,16 @@ services:
       # NOTHING — CORSMiddleware compares these as plain strings. Preview
       # deployments are covered by CORS_ORIGIN_REGEX below, not by this.
       - key: CORS_ORIGINS
-        value: "https://zenflow-ai.vercel.app,http://localhost:3000,http://localhost:5173"
+        value: "https://web-kappa-liard.vercel.app,https://zenflow-ai.vercel.app,http://localhost:3000,http://localhost:5173"
 
-      # Vercel preview URLs: zenflow-ai-<hash>-<scope>.vercel.app
+      # Vercel preview URLs: <project>-<hash>-<scope>.vercel.app.
+      # Single-quoted on purpose: YAML does not process escapes inside
+      # single quotes, so the regex reads as written. In double quotes
+      # "\." is an invalid escape and the whole Blueprint fails to parse.
+      # Both project names are covered, so renaming the Vercel project from
+      # "web" to "zenflow-ai" needs no change here.
       - key: CORS_ORIGIN_REGEX
-        value: "https://zenflow-ai-.*\.vercel\.app"
+        value: 'https://(web|zenflow-ai)-[a-z0-9]+-[a-z0-9-]+\.vercel\.app'
 
 # Optional, and worth doing once the service is settled: set Root Directory to
 # `server` in the dashboard, then simplify the two commands to
