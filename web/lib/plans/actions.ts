@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { generatePlans } from './generate';
 import type { OnboardingAnswers, PlanCandidate, Shape } from './types';
 
@@ -18,6 +19,7 @@ export async function completeOnboarding(
   answers: OnboardingAnswers,
   chosenShape: Shape
 ): Promise<{ ok: boolean; message?: string }> {
+  if (!isSupabaseConfigured()) return { ok: false, message: 'Accounts are not configured.' };
   const supabase = await createClient();
   const {
     data: { user },
@@ -66,6 +68,7 @@ export async function completeOnboarding(
 
 /** Rebuild plan options from stored answers, for changing plan later. */
 export async function replanFromProfile(): Promise<PlanCandidate[]> {
+  if (!isSupabaseConfigured()) return [];
   const supabase = await createClient();
   const {
     data: { user },

@@ -4,6 +4,7 @@ import { LiveSession } from '@/components/session/LiveSession';
 import { YOGA_POSE_BY_ID } from '@/lib/data/poses';
 import { getYogaFlow, type YogaFlow } from '@/lib/data/flows';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 
 export const metadata: Metadata = {
   title: 'Live session — ZenFlow AI',
@@ -37,6 +38,7 @@ interface PageProps {
  * than needing an ownership check here.
  */
 async function loadPlan(planId: string): Promise<YogaFlow | null> {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from('plans')

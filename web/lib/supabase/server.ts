@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+import { isSupabaseConfigured } from './config';
 
 /**
  * Supabase client for Server Components, Server Actions and Route Handlers.
@@ -36,6 +37,7 @@ export async function createClient() {
 
 /** The signed-in user, or null. Never throws — callers branch on null. */
 export async function getUser() {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const {
     data: { user },

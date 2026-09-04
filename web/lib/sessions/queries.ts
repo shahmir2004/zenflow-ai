@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { calculateStreak, type StreakResult } from './streak';
 
 export interface Profile {
@@ -32,6 +33,7 @@ export interface SessionRow {
 }
 
 export async function getProfile(): Promise<Profile | null> {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,6 +50,7 @@ export async function getProfile(): Promise<Profile | null> {
 }
 
 export async function getActivePlan(): Promise<PlanRow | null> {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from('plans')
@@ -58,6 +61,7 @@ export async function getActivePlan(): Promise<PlanRow | null> {
 }
 
 export async function getRecentSessions(limit = 10): Promise<SessionRow[]> {
+  if (!isSupabaseConfigured()) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from('sessions')
@@ -74,6 +78,7 @@ export async function getRecentSessions(limit = 10): Promise<SessionRow[]> {
  * whole rows to count days would grow with history for no benefit.
  */
 export async function getStreak(): Promise<StreakResult> {
+  if (!isSupabaseConfigured()) return calculateStreak([]);
   const supabase = await createClient();
   const { data } = await supabase
     .from('sessions')
@@ -105,6 +110,7 @@ export interface CorrectionTrend {
  * by when the session happened rather than by insertion.
  */
 export async function getCorrectionTrends(limitPerPose = 3): Promise<CorrectionTrend[]> {
+  if (!isSupabaseConfigured()) return [];
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -152,6 +158,7 @@ export async function getCorrectionTrends(limitPerPose = 3): Promise<CorrectionT
 
 /** Longest hold ever recorded, per pose. */
 export async function getPersonalBests(): Promise<Record<string, number>> {
+  if (!isSupabaseConfigured()) return {};
   const supabase = await createClient();
   const { data } = await supabase
     .from('session_poses')

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { isWorthSaving, type SessionRecord } from './types';
 
 export type SaveResult =
@@ -51,6 +52,8 @@ function rpcArgs(record: SessionRecord) {
  */
 export async function saveSession(record: SessionRecord): Promise<SaveResult> {
   if (!isWorthSaving(record)) return { status: 'skipped' };
+  // No accounts configured: the session belongs on this device.
+  if (!isSupabaseConfigured()) return { status: 'guest' };
 
   try {
     const supabase = await createClient();
@@ -82,6 +85,7 @@ export async function migrateGuestSessions(
   records: SessionRecord[]
 ): Promise<{ migrated: number; failed: number }> {
   if (!records.length) return { migrated: 0, failed: 0 };
+  if (!isSupabaseConfigured()) return { migrated: 0, failed: records.length };
 
   const supabase = await createClient();
   const {
@@ -113,6 +117,7 @@ export async function migrateGuestSessions(
 
 /** Erase everything practised, keeping the account. Promised in the FAQ. */
 export async function deleteAllPracticeData(): Promise<{ ok: boolean; message?: string }> {
+  if (!isSupabaseConfigured()) return { ok: false, message: 'Accounts are not configured.' };
   const supabase = await createClient();
   const { error } = await supabase.rpc('delete_my_practice_data');
   if (error) return { ok: false, message: error.message };

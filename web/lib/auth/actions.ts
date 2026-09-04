@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 
 /** Where OAuth and magic links should come back to, in any environment. */
 async function callbackUrl(next: string) {
@@ -31,6 +32,9 @@ export async function signInWithEmail(
   const email = String(formData.get('email') ?? '').trim();
   const next = String(formData.get('next') ?? '/home');
 
+  if (!isSupabaseConfigured()) {
+    return { error: 'Accounts are not set up on this deployment yet.' };
+  }
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return { error: 'That does not look like an email address.' };
   }

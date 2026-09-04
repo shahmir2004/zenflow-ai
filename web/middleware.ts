@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 
 /**
  * Refreshes the Supabase session on every request.
@@ -15,6 +16,11 @@ import { createServerClient } from '@supabase/ssr';
  */
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+
+  // No credentials means no accounts, which is a supported way to run this
+  // app rather than an error. Constructing a client here regardless is what
+  // turned a missing environment variable into a 500 on every route.
+  if (!isSupabaseConfigured()) return response;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
