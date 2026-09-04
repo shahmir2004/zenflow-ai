@@ -353,6 +353,28 @@ export function LiveSession({
     void camera.start();
   }, [camera, unlockAudio, primeVoice, prefetchVoice]);
 
+  /*
+   * A fallback unlock, for the paths where the camera gate never appears.
+   *
+   * Browsers only let audio play after a gesture, and the gate's Start button
+   * is normally that gesture. Preview mode skips the gate entirely, so without
+   * this the scripted coach runs in total silence — and preview is the route
+   * the README recommends for checking the session, which would make a working
+   * voice look broken. Any first interaction with the page will do.
+   */
+  useEffect(() => {
+    const unlock = () => {
+      unlockAudio();
+      primeVoice();
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [unlockAudio, primeVoice]);
+
   const gateVisible = !preview && !camera.isReady;
 
   return (
