@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { siteOrigin } from '@/lib/siteUrl';
 
 /**
  * Where Google OAuth and email magic links land.
@@ -9,7 +10,11 @@ import { isSupabaseConfigured } from '@/lib/supabase/config';
  * accounts go to onboarding; returning ones go where they were headed.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  // One trusted origin for every branch. `new URL(request.url).origin`
+  // is the internal host behind a proxy, so these error redirects were
+  // pointing at a URL that does not resolve publicly.
+  const origin = siteOrigin();
   if (!isSupabaseConfigured()) return NextResponse.redirect(`${origin}/`);
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/home';
@@ -54,13 +59,11 @@ export async function GET(request: NextRequest) {
   }
 
   /*
-   * Behind a proxy, `origin` is the internal host. Vercel sets
-   * x-forwarded-host to the real one, and redirecting to the internal host
-   * would drop the user on a URL that does not resolve publicly.
+   * Also the trusted origin rather than x-forwarded-host. The session cookie
+   * is already set on the real domain by this point, so a forged host here
+   * could not steal it — but it could still bounce a freshly signed-in user
+   * onto an attacker's page, and there is no reason to derive this from a
+   * request when the platform already tells us who we are.
    */
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  const isLocal = process.env.NODE_ENV === 'development';
-  const base = isLocal || !forwardedHost ? origin : `https://${forwardedHost}`;
-
-  return NextResponse.redirect(`${base}${destination}`);
+  return NextResponse.redirect(`${siteOrigin()}${destination}`);
 }
