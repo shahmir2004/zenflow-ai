@@ -26,3 +26,9 @@ out/
 # Deploy
 .vercel
 .gstack/
+
+# OAuth client secret files downloaded from Google Cloud Console.
+# These carry a live client secret. GitHub's push protection caught one that a
+# `git add -A` swept in from the repo root; this stops the next one.
+client_secret*.json
+*-credentials.json

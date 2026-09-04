@@ -13,7 +13,18 @@ import styles from './AppNav.module.css';
 export async function AppNav() {
   const user = await getUser();
   const profile = user ? await getProfile() : null;
-  const initial = (profile?.display_name ?? user?.email ?? '?').charAt(0).toUpperCase();
+  /*
+   * Guard against an empty initial. `coalesce` in the signup trigger only
+   * skips NULL, so a provider that supplies an empty full_name leaves
+   * display_name as '' — and `''.charAt(0)` is '', which renders the avatar as
+   * a blank circle that looks like a broken button.
+   */
+  const initial =
+    [profile?.display_name, user?.email]
+      .map((value) => value?.trim())
+      .find((value) => value && value.length > 0)
+      ?.charAt(0)
+      .toUpperCase() ?? '?';
 
   return (
     <header className={styles.nav}>

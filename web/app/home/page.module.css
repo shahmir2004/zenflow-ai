@@ -3,7 +3,26 @@
 }
 
 .head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
   margin-bottom: 26px;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-neutral-700);
+  max-width: 46ch;
+}
+
+.backHome {
+  flex: none;
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .greeting {
@@ -34,7 +53,26 @@
   padding: 18px 20px;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.statIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  background: var(--color-accent-100);
   color: var(--color-accent-700);
+}
+
+.statFoot {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
 }
 
 .statValue {
@@ -242,5 +280,32 @@
   }
   .sessionWhen {
     min-width: 78px;
+  }
+}
+
+
+/* The two charts sit side by side where there is room. The calendar is the
+   wider of the two: twelve columns of squares need the space, and the hold
+   chart reads fine narrow. */
+.charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 34px;
+}
+
+@media (max-width: 1000px) {
+  .charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .head {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .subtitle {
+    font-size: 14px;
   }
 }

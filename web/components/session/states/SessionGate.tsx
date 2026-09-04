@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useHomeHref, useSignedIn } from '@/lib/hooks/useSignedIn';
 import { Camera, Loader, ShieldCheck } from 'lucide-react';
 import { PoseFigure } from '@/components/PoseFigure';
 import type { CameraError, CameraStatus } from '@/lib/hooks/useCamera';
@@ -36,6 +37,8 @@ export function SessionGate({
   poseId,
   onStart,
 }: SessionGateProps) {
+  const homeHref = useHomeHref();
+  const signedIn = useSignedIn();
   const requesting = cameraStatus === 'requesting';
   const problem = cameraError?.message ?? modelError;
 
@@ -63,7 +66,7 @@ export function SessionGate({
             <span>
               Pose detection runs in your browser. Only anonymous joint
               coordinates are sent for evaluation — the video never leaves your
-              device, and nothing is recorded.
+              device, and no video is ever recorded.
             </span>
           </p>
 
@@ -87,8 +90,8 @@ export function SessionGate({
               )}
             </button>
 
-            <Link href="/" className={`btn btn-secondary ${styles.cta}`}>
-              Back to the poses
+            <Link href={homeHref} className={`btn btn-secondary ${styles.cta}`}>
+              {signedIn ? 'Back to your practice' : 'Back to the poses'}
             </Link>
           </div>
 

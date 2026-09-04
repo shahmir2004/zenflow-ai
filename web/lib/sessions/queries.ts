@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { calculateStreak, type StreakResult } from './streak';
+import { calculateStreak, utcDay, type StreakResult } from './streak';
 
 export interface Profile {
   id: string;
@@ -172,4 +172,52 @@ export async function getPersonalBests(): Promise<Record<string, number>> {
     if (row.held_seconds > current) best[row.pose_id] = row.held_seconds;
   }
   return best;
+}
+
+
+export interface DayPractice {
+  /** YYYY-MM-DD, UTC — the same bucketing the streak uses. */
+  day: string;
+  sessions: number;
+  heldSeconds: number;
+}
+
+/**
+ * One row per day for the practice calendar.
+ *
+ * Returns a dense range — every day in the window, including the empty ones —
+ * because a calendar has to draw the gaps. Working that out in the component
+ * would mean it needed its own idea of what "today" is, and the streak already
+ * owns that.
+ */
+export async function getDailyPractice(days = 84): Promise<DayPractice[]> {
+  const since = new Date(Date.now() - (days - 1) * 86_400_000);
+  since.setUTCHours(0, 0, 0, 0);
+
+  const byDay = new Map<string, DayPractice>();
+
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from('sessions')
+      .select('ended_at, total_held_seconds')
+      .gte('ended_at', since.toISOString())
+      .order('ended_at', { ascending: true });
+
+    for (const row of (data ?? []) as { ended_at: string; total_held_seconds: number }[]) {
+      const day = utcDay(row.ended_at);
+      const entry = byDay.get(day) ?? { day, sessions: 0, heldSeconds: 0 };
+      entry.sessions += 1;
+      entry.heldSeconds += Number(row.total_held_seconds);
+      byDay.set(day, entry);
+    }
+  }
+
+  const dense: DayPractice[] = [];
+  for (let i = 0; i < days; i += 1) {
+    const date = new Date(since.getTime() + i * 86_400_000);
+    const day = date.toISOString().slice(0, 10);
+    dense.push(byDay.get(day) ?? { day, sessions: 0, heldSeconds: 0 });
+  }
+  return dense;
 }

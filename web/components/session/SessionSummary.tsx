@@ -6,6 +6,7 @@ import type { SessionSummary as Summary } from '@/lib/hooks/useYogaFlow';
 import styles from './SessionSummary.module.css';
 
 import type { SaveState } from '@/lib/hooks/useSessionSave';
+import { useHomeHref, useSignedIn } from '@/lib/hooks/useSignedIn';
 import { PoseFigure } from '@/components/PoseFigure';
 import {
   jointColorsToFlags,
@@ -79,6 +80,13 @@ function describeDuration(totalSeconds: number): string {
  * that cue came up, so it reflects the session rather than flattering it.
  */
 export function SessionSummary({ summary, onFlowAgain, saveState }: SessionSummaryProps) {
+  /*
+   * A signed-in user has somewhere to go back to. Sending them to the
+   * marketing page after they have just practised drops them behind a "Sign
+   * in" link, with their streak and history one more click away.
+   */
+  const homeHref = useHomeHref();
+  const signedIn = useSignedIn();
   const { totalHeldSeconds, posesToTarget, totalPoses, best, toFixNext } = summary;
   const held = formatDuration(totalHeldSeconds);
 
@@ -169,8 +177,8 @@ export function SessionSummary({ summary, onFlowAgain, saveState }: SessionSumma
         {saveState && <SaveNote state={saveState} />}
 
         <div className={styles.actions}>
-          <Link href="/" className="btn btn-secondary">
-            Back to landing
+          <Link href={homeHref} className="btn btn-secondary">
+            {signedIn ? 'Back to your practice' : 'Back to landing'}
           </Link>
           <button type="button" className="btn btn-primary" onClick={onFlowAgain}>
             Flow again

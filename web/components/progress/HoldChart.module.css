@@ -1,0 +1,80 @@
+.wrap {
+  padding: 24px 26px 18px;
+  border-radius: 32px;
+  background: var(--color-surface);
+}
+
+.title {
+  font-size: 24px;
+  line-height: 1.1;
+  margin: 0 0 5px;
+}
+
+.lede {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  color: var(--color-neutral-700);
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Rounded at the data end only, anchored to the baseline. */
+.bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--color-accent-600);
+  transition: background-color 0.18s ease;
+}
+.bar:hover {
+  background: var(--color-accent-700);
+}
+
+/* The most recent session, in the darker step of the same hue. */
+.bar[data-latest='true'] {
+  background: var(--color-accent-800);
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--color-divider);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+
+.peak {
+  color: var(--color-accent-700);
+}
+
+@media (max-width: 560px) {
+  .wrap {
+    padding: 20px 18px 14px;
+    border-radius: 24px;
+  }
+  .title {
+    font-size: 21px;
+  }
+  .chart {
+    height: 96px;
+  }
+}

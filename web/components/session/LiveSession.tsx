@@ -22,6 +22,7 @@ import { useChime } from '@/lib/hooks/useChime';
 import { useBackendWarmup } from '@/lib/hooks/useBackendWarmup';
 import { usePersisted, STORAGE_KEYS } from '@/lib/hooks/usePersisted';
 import { useSessionSave } from '@/lib/hooks/useSessionSave';
+import { useHomeHref, useSignedIn } from '@/lib/hooks/useSignedIn';
 import { usePreviewDriver } from '@/lib/hooks/usePreviewDriver';
 import {
   useYogaFlow,
@@ -75,6 +76,8 @@ export function LiveSession({
   preview = false,
 }: LiveSessionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const homeHref = useHomeHref();
+  const signedIn = useSignedIn();
 
   const [mode, setMode] = useState<SessionMode>(initialMode);
   const [singlePoseId, setSinglePoseId] = usePersistedPose(initialPoseId);
@@ -385,9 +388,9 @@ export function LiveSession({
             confidence={lastResponse?.confidence ?? 0}
           />
 
-          <Link href="/" className={styles.back}>
+          <Link href={homeHref} className={styles.back}>
             <ArrowLeft size={16} strokeWidth={2.75} />
-            Back to the poses
+            {signedIn ? 'Your practice' : 'Back to the poses'}
           </Link>
 
           <div className={styles.topLeft}>

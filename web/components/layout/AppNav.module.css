@@ -87,22 +87,40 @@
 
 @media (max-width: 720px) {
   .nav {
-    gap: 14px;
-    padding: 16px 22px;
+    gap: 10px;
+    padding: 14px 18px;
   }
-  /* The links all live one tap away behind the avatar on a phone; the CTA is
-     the only thing that cannot be reached another way. */
-  .links {
-    display: none;
-  }
-  .brand {
-    margin-right: auto;
-  }
+
+  /*
+   * The links stay. They were hidden here with a comment claiming they lived
+   * "one tap away behind the avatar" — they did not: the avatar goes to
+   * /account, which has no navigation of its own, so Progress was unreachable
+   * on a phone entirely. The wordmark is what gives up its space instead.
+   */
   .wordmark {
     display: none;
   }
-  .cta {
-    padding: 9px 16px;
+  .links {
+    gap: 16px;
+    margin-left: 4px;
+  }
+  .link {
     font-size: 13px;
+  }
+  .cta {
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+  /* The avatar is a duplicate of the Account link at this size. */
+  .avatar {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  /* Below this the CTA and three links cannot both fit. The session is
+     reachable from the plan card on the page itself, so the links win. */
+  .cta {
+    display: none;
   }
 }
