@@ -22,6 +22,27 @@ export async function middleware(request: NextRequest) {
   // turned a missing environment variable into a 500 on every route.
   if (!isSupabaseConfigured()) return response;
 
+  /*
+   * Rescue an auth code that landed somewhere other than the callback.
+   *
+   * Supabase ignores `emailRedirectTo` when it is not in the project's
+   * redirect allow-list and silently falls back to the Site URL, so a magic
+   * link arrives as `/?code=...` instead of `/auth/callback?code=...`. Nothing
+   * on the landing page reads that code, so the user clicks a valid link and
+   * lands on a page that quietly does nothing.
+   *
+   * Forwarding it here means the flow completes anyway. It does not excuse a
+   * wrong Site URL — if that points at another host entirely, the link never
+   * reaches this app at all — but it removes the silent failure for every case
+   * where it does.
+   */
+  const { pathname, searchParams } = request.nextUrl;
+  if (searchParams.has('code') && !pathname.startsWith('/auth/')) {
+    const callback = request.nextUrl.clone();
+    callback.pathname = '/auth/callback';
+    return NextResponse.redirect(callback);
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
