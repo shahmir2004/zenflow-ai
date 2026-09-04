@@ -1,0 +1,108 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 24px var(--gutter);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mark {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  border: 2.75px solid var(--color-accent);
+  display: grid;
+  place-items: center;
+}
+.markDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent-2-500);
+}
+
+.wordmark {
+  font-family: var(--font-heading);
+  font-size: 19px;
+  letter-spacing: -0.015em;
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin-right: auto;
+  margin-left: 14px;
+}
+
+.link {
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--color-accent-700);
+  transition: color 0.2s ease;
+}
+.link:hover {
+  color: var(--color-accent-600);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cta {
+  font-size: 14px;
+  padding: 10px 20px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-accent-800);
+  font-family: var(--font-heading);
+  font-size: 15px;
+  text-decoration: none;
+}
+.avatar:hover {
+  background: var(--color-accent-200);
+}
+
+@media (max-width: 720px) {
+  .nav {
+    gap: 14px;
+    padding: 16px 22px;
+  }
+  /* The links all live one tap away behind the avatar on a phone; the CTA is
+     the only thing that cannot be reached another way. */
+  .links {
+    display: none;
+  }
+  .brand {
+    margin-right: auto;
+  }
+  .wordmark {
+    display: none;
+  }
+  .cta {
+    padding: 9px 16px;
+    font-size: 13px;
+  }
+}

@@ -8,7 +8,7 @@ import styles from './Faq.module.css';
 const QUESTIONS = [
   {
     q: 'Does my video get uploaded anywhere?',
-    a: 'No. Pose estimation runs in your browser and only the anonymous joint coordinates are sent for evaluation — never the image. Nothing is recorded.',
+    a: 'No. Pose estimation runs in your browser and only the anonymous joint coordinates are sent for evaluation — never the image, and no video is ever recorded. If you make an account, we save what you held and what the coach flagged, so you can watch it improve. You can delete all of it at any time.',
   },
   {
     q: 'What if I can’t see the screen from my mat?',

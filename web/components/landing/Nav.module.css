@@ -74,3 +74,17 @@
     display: none;
   }
 }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.secondary {
+  font-size: 14px;
+  padding: 11px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { NavAuthLink } from './NavAuthLink';
 import styles from './Nav.module.css';
 
 const LINKS = [
@@ -30,9 +31,17 @@ export function Nav() {
         ))}
       </nav>
 
-      <Link href="/session" className={`btn btn-primary ${styles.cta}`}>
-        Start a session
-      </Link>
+      <div className={styles.actions}>
+        {/*
+          Sign-in is offered, never required. The lede two sections down
+          promises no account is needed for a first flow, so the primary
+          action stays the session itself.
+        */}
+        <NavAuthLink className={`btn btn-ghost ${styles.secondary}`} />
+        <Link href="/session" className={`btn btn-primary ${styles.cta}`}>
+          Start a session
+        </Link>
+      </div>
     </header>
   );
 }

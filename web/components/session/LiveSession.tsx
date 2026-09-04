@@ -13,7 +13,7 @@ import {
   type YogaResponse,
 } from '@/lib/contracts/yoga';
 import { getYogaPose, YOGA_POSES } from '@/lib/data/poses';
-import { defaultFlow, getYogaFlow } from '@/lib/data/flows';
+import { defaultFlow, getYogaFlow, type YogaFlow } from '@/lib/data/flows';
 import { useCamera } from '@/lib/hooks/useCamera';
 import { usePoseDetection } from '@/lib/hooks/usePoseDetection';
 import { useYogaWebSocket } from '@/lib/hooks/useYogaWebSocket';
@@ -21,6 +21,7 @@ import { useSpeech } from '@/lib/hooks/useSpeech';
 import { useChime } from '@/lib/hooks/useChime';
 import { useBackendWarmup } from '@/lib/hooks/useBackendWarmup';
 import { usePersisted, STORAGE_KEYS } from '@/lib/hooks/usePersisted';
+import { useSessionSave } from '@/lib/hooks/useSessionSave';
 import { usePreviewDriver } from '@/lib/hooks/usePreviewDriver';
 import {
   useYogaFlow,
@@ -47,6 +48,13 @@ interface LiveSessionProps {
   initialMode: SessionMode;
   openSheetOnLoad?: boolean;
   /**
+   * A plan built for this user, which takes precedence over the built-in
+   * flows. Same shape, so nothing downstream needs to know the difference.
+   */
+  customFlow?: YogaFlow;
+  /** Links the saved session back to the plan it followed. */
+  planId?: string | null;
+  /**
    * Scripted stand-in for the camera and the coach (`?preview=1`). Used to
    * inspect the live states without a person in front of a lens. It labels
    * itself on screen — nothing ever falls back to it silently.
@@ -62,6 +70,8 @@ export function LiveSession({
   initialFlowId,
   initialMode,
   openSheetOnLoad = false,
+  customFlow,
+  planId = null,
   preview = false,
 }: LiveSessionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -70,6 +80,7 @@ export function LiveSession({
   const [singlePoseId, setSinglePoseId] = usePersistedPose(initialPoseId);
   const [sheetOpen, setSheetOpen] = useState(openSheetOnLoad);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [pausedState, setPausedState] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [landmarks, setLandmarks] = useState<PoseLandmark[]>([]);
   // Read from the stream itself rather than assumed: the overlay has to
@@ -83,8 +94,8 @@ export function LiveSession({
   );
 
   const flowDefinition = useMemo(
-    () => getYogaFlow(initialFlowId) ?? defaultFlow(),
-    [initialFlowId]
+    () => customFlow ?? getYogaFlow(initialFlowId) ?? defaultFlow(),
+    [customFlow, initialFlowId]
   );
 
   const sessionConfig: YogaSessionConfig = useMemo(
@@ -126,25 +137,64 @@ export function LiveSession({
 
   const handleNoBody = useCallback(() => setLandmarks([]), []);
 
+  /*
+   * Pausing stops the detection loop and the socket frames, not the camera.
+   * Tearing the camera down would make resuming take a permission round trip
+   * and a second of black; leaving it running makes resume instant, and no
+   * frame is sent or evaluated in the meantime.
+   */
+  const pausedRef = useRef(false);
+
   const detection = usePoseDetection({
     videoRef,
-    enabled: !preview && camera.isReady,
+    enabled: !preview && camera.isReady && !pausedState,
     onLandmarks: handleLandmarks,
     onNoBody: handleNoBody,
   });
 
   // In preview the script supplies both halves of the pipeline; everything
   // downstream reads these, so the UI cannot tell the difference.
-  const previewFrame = usePreviewDriver(preview, singlePoseId);
+  const previewFrame = usePreviewDriver(preview, singlePoseId, pausedState);
   const lastResponse = previewFrame?.response ?? socketResponse;
   const shownLandmarks = previewFrame?.landmarks ?? landmarks;
 
-  const handleComplete = useCallback((result: Summary) => {
-    setSummary(result);
-    // The sheet is reference material for a pose you are about to hold; once
-    // the session is over it is just something layered under the summary.
-    setSheetOpen(false);
-  }, []);
+  /*
+   * Destructured deliberately. The hook returns a fresh object each render, so
+   * depending on `save` as a whole gave handleComplete a new identity every
+   * render — which flowed into useYogaFlow's finishStep, into the response
+   * effect's dependencies, and produced a setState-render-setState loop that
+   * pinned the session on its first frame. persist and reset are useCallback
+   * with no dependencies, so these three are stable.
+   */
+  const {
+    state: saveState,
+    persist: persistSession,
+    reset: resetSave,
+  } = useSessionSave();
+
+  /*
+   * Read the current frame without re-rendering on every one. The flow hook
+   * calls this only when a new correction takes over — a few times a session,
+   * not at 12fps — so a ref is both enough and much cheaper than threading
+   * landmarks through state.
+   */
+  const landmarksRef = useRef<PoseLandmark[]>([]);
+  // shownLandmarks, not landmarks: this must be the same frame the overlay is
+  // drawing, or a snapshot would show something the user never saw. It also
+  // means the preview drives snapshots like everything else.
+  landmarksRef.current = shownLandmarks;
+  const getLandmarks = useCallback(() => landmarksRef.current, []);
+
+  const handleComplete = useCallback(
+    (result: Summary) => {
+      setSummary(result);
+      persistSession(result, planId ? 'plan' : mode, planId);
+      // The sheet is reference material for a pose you are about to hold; once
+      // the session is over it is just something layered under the summary.
+      setSheetOpen(false);
+    },
+    [persistSession, mode, planId]
+  );
 
   const flow = useYogaFlow({
     config: sessionConfig,
@@ -152,6 +202,7 @@ export function LiveSession({
     setPose,
     speak,
     onComplete: handleComplete,
+    getLandmarks,
   });
 
   /* ── the chime, fired once per hold ─────────────────────────────────── */
@@ -214,6 +265,8 @@ export function LiveSession({
     response: lastResponse,
     framingProblem,
     resting: flow.phase === 'rest',
+    paused: flow.paused,
+    pausedPoseName: flow.currentPose?.name ?? null,
     restRemaining: flow.restRemaining,
     nextPoseName: flow.nextPose?.name ?? null,
     countdown,
@@ -246,18 +299,35 @@ export function LiveSession({
     [mode, flow]
   );
 
+  const handlePauseChange = useCallback(
+    (next: boolean) => {
+      pausedRef.current = next;
+      setPausedState(next);
+      if (next) {
+        cancelSpeech();
+        flow.pause();
+      } else {
+        flow.resume();
+      }
+    },
+    [flow, cancelSpeech]
+  );
+
   const handleEndSession = useCallback(() => {
     cancelSpeech();
-    setSummary(flow.buildSummary());
+    const result = flow.buildSummary();
+    setSummary(result);
+    persistSession(result, planId ? 'plan' : mode, planId);
     flow.stop();
-  }, [flow, cancelSpeech]);
+  }, [flow, cancelSpeech, persistSession, mode, planId]);
 
   const handleFlowAgain = useCallback(() => {
     setSummary(null);
+    resetSave();
     startedRef.current = false;
     setCountdown(null);
     flow.start();
-  }, [flow]);
+  }, [flow, resetSave]);
 
   const handleStartCamera = useCallback(() => {
     // Unlock audio inside the click so the chime can play later without one.
@@ -375,6 +445,9 @@ export function LiveSession({
             onFocusSurfaceChange={setFocusSurface}
             onOpenDetails={() => setSheetOpen(true)}
             onEndSession={handleEndSession}
+          paused={flow.paused}
+          onPauseChange={handlePauseChange}
+          sessionActive={flow.active}
           />
         </>
       )}
@@ -382,6 +455,11 @@ export function LiveSession({
       <PoseSheet
         pose={currentPose}
         open={sheetOpen}
+        showPicker={mode === 'single'}
+        onSelectPose={(poseId) => {
+          handleSelectPose(poseId);
+          setSheetOpen(false);
+        }}
         onClose={() => setSheetOpen(false)}
         onHoldThisPose={() => {
           handleSelectPose(currentPose.id);
@@ -389,7 +467,13 @@ export function LiveSession({
         }}
       />
 
-      {summary && <SessionSummary summary={summary} onFlowAgain={handleFlowAgain} />}
+      {summary && (
+        <SessionSummary
+          summary={summary}
+          onFlowAgain={handleFlowAgain}
+          saveState={saveState}
+        />
+      )}
 
       {gateVisible && (
         <SessionGate
@@ -446,8 +530,30 @@ function deriveCue(args: {
   restRemaining: number;
   nextPoseName: string | null;
   countdown: number | null;
+  paused: boolean;
+  pausedPoseName: string | null;
 }): { cueKind: CueKind; cueMessage: string } {
-  const { response, framingProblem, resting, restRemaining, nextPoseName, countdown } = args;
+  const {
+    response, framingProblem, resting, restRemaining, nextPoseName, countdown,
+    paused, pausedPoseName,
+  } = args;
+
+  /*
+   * Pause outranks everything, and says what it costs.
+   *
+   * The server's hold timer is wall-clock and drops a hold once the body has
+   * been absent past its debounce, so a paused hold is genuinely gone rather
+   * than suspended. Saying so here is the difference between a user choosing
+   * to pause and a user discovering their twenty seconds vanished.
+   */
+  if (paused) {
+    return {
+      cueKind: 'waiting',
+      cueMessage: pausedPoseName
+        ? `Paused. ${pausedPoseName} starts again from zero when you resume.`
+        : 'Paused.',
+    };
+  }
 
   if (countdown !== null) {
     return { cueKind: 'waiting', cueMessage: 'Hold still — starting in a moment.' };

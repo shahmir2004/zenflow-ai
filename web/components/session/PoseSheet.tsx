@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { PoseFigure } from '@/components/PoseFigure';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
-import type { YogaPose } from '@/lib/data/poses';
+import { YOGA_POSES, type YogaPose } from '@/lib/data/poses';
 import styles from './PoseSheet.module.css';
 
 interface PoseSheetProps {
@@ -13,9 +13,23 @@ interface PoseSheetProps {
   open: boolean;
   onClose: () => void;
   onHoldThisPose: () => void;
+  /**
+   * Pose switching, in single-pose mode only. It lives here rather than in the
+   * control bar because eight chips is too much to carry mid-pose, and because
+   * this is the one surface with room to show what each pose actually is.
+   */
+  showPicker?: boolean;
+  onSelectPose?: (poseId: string) => void;
 }
 
-export function PoseSheet({ pose, open, onClose, onHoldThisPose }: PoseSheetProps) {
+export function PoseSheet({
+  pose,
+  open,
+  onClose,
+  onHoldThisPose,
+  showPicker = false,
+  onSelectPose,
+}: PoseSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const isBottomSheet = useMediaQuery('(max-width: 700px)');
 
@@ -95,6 +109,31 @@ export function PoseSheet({ pose, open, onClose, onHoldThisPose }: PoseSheetProp
                 <li key={cue}>{cue}</li>
               ))}
             </ul>
+
+            {showPicker && onSelectPose && (
+              <>
+                <h6 className={styles.cuesHeading}>Hold a different pose</h6>
+                <ul className={styles.picker}>
+                  {YOGA_POSES.map((option) => (
+                    <li key={option.id}>
+                      <button
+                        type="button"
+                        className={styles.pickerItem}
+                        data-active={option.id === pose.id}
+                        aria-pressed={option.id === pose.id}
+                        onClick={() => onSelectPose(option.id)}
+                      >
+                        <span className={styles.pickerFigure}>
+                          <PoseFigure poseId={option.id} ground={false} />
+                        </span>
+                        <span className={styles.pickerName}>{option.short}</span>
+                        <span className={styles.pickerHold}>{option.holdTargetSeconds}s</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             {pose.cameraView === 'side' && (
               <p className={styles.sideNote}>

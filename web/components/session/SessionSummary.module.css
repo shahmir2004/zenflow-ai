@@ -142,3 +142,41 @@
     border-radius: 22px;
   }
 }
+
+/* Where the session's record went. Sits between the findings and the actions:
+   it is a footnote to what just happened, not a call to action competing with
+   "Flow again". */
+.saveNote {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-neutral-700);
+  text-wrap: pretty;
+}
+
+.saveLink {
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.saveLink:hover {
+  color: var(--color-accent-600);
+}
+
+/* The captured frame, beside the cue it belongs to. Small on purpose: it is
+   evidence for the sentence next to it, not the subject of the row. */
+.fixFigure {
+  display: block;
+  flex: none;
+  width: 46px;
+  /* Taller than wide, because a standing body is. The figure preserves its
+     aspect rather than stretching to the box - a stretched pose is a
+     different pose - so a square box would waste most of the height and
+     leave thirteen joints in about ten pixels of width. */
+  height: 68px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-neutral-100) 60%, transparent);
+}

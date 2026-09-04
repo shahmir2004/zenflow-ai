@@ -5,9 +5,51 @@ import { motion } from 'motion/react';
 import type { SessionSummary as Summary } from '@/lib/hooks/useYogaFlow';
 import styles from './SessionSummary.module.css';
 
+import type { SaveState } from '@/lib/hooks/useSessionSave';
+import { PoseFigure } from '@/components/PoseFigure';
+import {
+  jointColorsToFlags,
+  landmarksToSkeleton,
+} from '@/lib/data/landmarksToSkeleton';
+
 interface SessionSummaryProps {
   summary: Summary;
   onFlowAgain: () => void;
+  saveState?: SaveState;
+}
+
+/**
+ * What became of this session's record.
+ *
+ * The guest case is the interesting one: nothing is lost, it is held locally
+ * and claimed on sign-in, so this is an offer rather than a warning. Saying
+ * "not saved" would be both alarming and untrue.
+ */
+function SaveNote({ state }: { state: SaveState }) {
+  if (state.status === 'idle' || state.status === 'saving') return null;
+
+  if (state.status === 'guest') {
+    return (
+      <p className={styles.saveNote}>
+        Held on this device.{' '}
+        <Link href="/sign-in?next=/home" className={styles.saveLink}>
+          Sign in to keep it
+        </Link>{' '}
+        and watch your form settle over time.
+      </p>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <p className={styles.saveNote} role="alert">
+        We couldn’t save this to your account, so it’s on this device for now.
+        It’ll go up next time you finish a session.
+      </p>
+    );
+  }
+
+  return <p className={styles.saveNote}>Saved to your practice.</p>;
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -36,7 +78,7 @@ function describeDuration(totalSeconds: number): string {
  * corrections stop being transient. Each row is a real count of how many times
  * that cue came up, so it reflects the session rather than flattering it.
  */
-export function SessionSummary({ summary, onFlowAgain }: SessionSummaryProps) {
+export function SessionSummary({ summary, onFlowAgain, saveState }: SessionSummaryProps) {
   const { totalHeldSeconds, posesToTarget, totalPoses, best, toFixNext } = summary;
   const held = formatDuration(totalHeldSeconds);
 
@@ -84,15 +126,38 @@ export function SessionSummary({ summary, onFlowAgain }: SessionSummaryProps) {
           <>
             <h6 className={styles.fixHeading}>To fix next</h6>
             <ul className={styles.fixList}>
-              {toFixNext.map((item) => (
-                <li key={`${item.poseId}-${item.correction}`} className={styles.fixRow}>
-                  <span className={styles.fixText}>
-                    <span className={styles.fixCorrection}>{item.correction}</span>
-                    <span className={styles.fixPose}>{item.poseName}</span>
-                  </span>
-                  <span className="tag tag-accent">{item.count}×</span>
-                </li>
-              ))}
+              {toFixNext.map((item) => {
+                /*
+                 * The frame this fault was worst on, replayed as the same
+                 * figure the live overlay draws. Thirty-three coordinates,
+                 * never an image — which is how the app can show someone what
+                 * their knee was doing without recording them.
+                 */
+                const snapshot = summary.snapshots.find(
+                  (s) => s.poseId === item.poseId && s.correction === item.correction
+                );
+                const replay = snapshot ? landmarksToSkeleton(snapshot.landmarks) : null;
+
+                return (
+                  <li key={`${item.poseId}-${item.correction}`} className={styles.fixRow}>
+                    {replay && (
+                      <span className={styles.fixFigure} aria-hidden="true">
+                        <PoseFigure
+                          skeleton={replay.skeleton}
+                          viewBox={replay.viewBox}
+                          flags={jointColorsToFlags(snapshot!.jointColors)}
+                          ground={false}
+                        />
+                      </span>
+                    )}
+                    <span className={styles.fixText}>
+                      <span className={styles.fixCorrection}>{item.correction}</span>
+                      <span className={styles.fixPose}>{item.poseName}</span>
+                    </span>
+                    <span className="tag tag-accent">{item.count}×</span>
+                  </li>
+                );
+              })}
             </ul>
           </>
         ) : (
@@ -100,6 +165,8 @@ export function SessionSummary({ summary, onFlowAgain }: SessionSummaryProps) {
             No repeated corrections this session. Your form held steady throughout.
           </p>
         )}
+
+        {saveState && <SaveNote state={saveState} />}
 
         <div className={styles.actions}>
           <Link href="/" className="btn btn-secondary">

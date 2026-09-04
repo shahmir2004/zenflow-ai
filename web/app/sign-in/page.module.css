@@ -1,0 +1,95 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 22px;
+  background:
+    radial-gradient(circle at 82% 12%, var(--color-accent-200), transparent 42%),
+    radial-gradient(circle at 8% 88%, var(--color-accent-2-200), transparent 46%),
+    var(--color-bg);
+}
+
+.card {
+  width: min(430px, 100%);
+  padding: 40px;
+  border-radius: 44px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-size: 18px;
+}
+
+.mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.75px solid var(--color-accent);
+  display: grid;
+  place-items: center;
+}
+.markDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent-2-500);
+}
+
+.title {
+  font-size: 34px;
+  line-height: 1.05;
+  margin: 0 0 10px;
+}
+
+.lede {
+  margin: 0 0 26px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-neutral-700);
+  text-wrap: pretty;
+}
+
+.pageError {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.guest {
+  margin: 24px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-neutral-700);
+}
+.guest a {
+  color: var(--color-accent-700);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.guest a:hover {
+  color: var(--color-accent-600);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 30px 24px;
+    border-radius: 32px;
+  }
+  .title {
+    font-size: 28px;
+  }
+}

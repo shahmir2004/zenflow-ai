@@ -1,0 +1,49 @@
+.confirm {
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-100);
+}
+
+.confirmText {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-accent-800);
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The one genuinely destructive control in the app. It uses the fix colour
+   from the form-feedback scale rather than a new red, so red keeps meaning
+   the same thing everywhere. */
+.destructive {
+  background: var(--form-fix);
+  color: var(--color-neutral-100);
+}
+.destructive:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.error {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--color-accent-800);
+}
+
+.done {
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 56ch;
+  text-wrap: pretty;
+}

@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Info, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
-import { YOGA_POSES, type YogaPose } from '@/lib/data/poses';
+import { Info, Moon, Pause, Play, Sun, Volume2, VolumeX } from 'lucide-react';
+import type { YogaPose } from '@/lib/data/poses';
 import type { ResolvedStep } from '@/lib/data/flowEngine';
 import { getYogaPose } from '@/lib/data/poses';
 import styles from './ControlBar.module.css';
@@ -24,6 +23,9 @@ interface ControlBarProps {
   onFocusSurfaceChange: (on: boolean) => void;
   onOpenDetails: () => void;
   onEndSession: () => void;
+  paused: boolean;
+  onPauseChange: (paused: boolean) => void;
+  sessionActive: boolean;
 }
 
 /** Lucide at the design system's weight. */
@@ -44,33 +46,10 @@ export function ControlBar({
   onFocusSurfaceChange,
   onOpenDetails,
   onEndSession,
+  paused,
+  onPauseChange,
+  sessionActive,
 }: ControlBarProps) {
-  const activeChipRef = useRef<HTMLButtonElement>(null);
-
-  // The chip row scrolls horizontally on a phone, and selecting Cobra would
-  // otherwise leave the active pose off-screen with no sign anything moved.
-  //
-  // Scrolling the row directly rather than with scrollIntoView: that method
-  // walks up and scrolls every scrollable ancestor, and the session is a
-  // fixed, overflow-hidden surface that must not move.
-  useEffect(() => {
-    const chip = activeChipRef.current;
-    const row = chip?.parentElement;
-    if (!chip || !row) return;
-
-    // Measured from rects rather than offsetLeft: the row is not a positioned
-    // element, so offsetLeft resolves against the control bar and includes the
-    // mode segment's width.
-    const chipBox = chip.getBoundingClientRect();
-    const rowBox = row.getBoundingClientRect();
-    row.scrollTo({
-      left:
-        row.scrollLeft +
-        (chipBox.left - rowBox.left) -
-        (rowBox.width - chipBox.width) / 2,
-      behavior: 'smooth',
-    });
-  }, [currentPose?.id, mode]);
 
   return (
     <div className={styles.bar}>
@@ -96,24 +75,16 @@ export function ControlBar({
       </div>
 
       {mode === 'single' ? (
-        <div className={styles.chips} role="group" aria-label="Choose a pose">
-          {YOGA_POSES.map((pose) => {
-            const active = pose.id === currentPose?.id;
-            return (
-              <button
-                key={pose.id}
-                type="button"
-                ref={active ? activeChipRef : undefined}
-                className={styles.chip}
-                data-active={active}
-                aria-pressed={active}
-                onClick={() => onSelectPose(pose.id)}
-              >
-                {pose.short}
-              </button>
-            );
-          })}
-        </div>
+        <button
+          type="button"
+          className={styles.posePicker}
+          onClick={onOpenDetails}
+        >
+          <span className={styles.posePickerName}>
+            {currentPose?.short ?? 'Choose a pose'}
+          </span>
+          <span className={styles.posePickerHint}>Change</span>
+        </button>
       ) : (
         <div className={styles.flow}>
           <div className={styles.track} role="group" aria-label="Flow progress">
@@ -138,6 +109,18 @@ export function ControlBar({
       )}
 
       <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.pauseButton}
+          onClick={() => onPauseChange(!paused)}
+          disabled={!sessionActive}
+          aria-pressed={paused}
+          title={paused ? 'Resume the session' : 'Pause the session'}
+        >
+          {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
+          <span>{paused ? 'Resume' : 'Pause'}</span>
+        </button>
+
         <button
           type="button"
           className={styles.iconButton}

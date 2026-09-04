@@ -218,3 +218,64 @@
     padding: 10px 16px;
   }
 }
+
+/* Pause is the one control that is time-critical, so it is the only icon
+   button that also carries a word — findable without looking for it. */
+.pauseButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 16px 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--zf-segment-bg);
+  color: var(--zf-ink);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.pauseButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--zf-ink) 14%, transparent);
+}
+.pauseButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pauseButton[aria-pressed='true'] {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* Single-pose mode: the eight-chip row moved into the sheet, where there is
+   room to show each pose properly. What stays is the current pose and a way
+   to change it. */
+.posePicker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--zf-segment-bg);
+  color: var(--zf-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.posePicker:hover {
+  background: color-mix(in srgb, var(--zf-ink) 14%, transparent);
+}
+
+.posePickerName {
+  font-family: var(--font-heading);
+  font-size: 15px;
+}
+
+.posePickerHint {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { YogaResponse } from '@/lib/contracts/yoga';
+import { isFramingProblem, type PoseLandmark, type YogaResponse } from '@/lib/contracts/yoga';
 import { getYogaPose, type YogaPose } from '@/lib/data/poses';
 import { stepHoldSeconds, type YogaFlow } from '@/lib/data/flows';
 import {
@@ -23,8 +23,24 @@ export interface CompletedPose {
   poseId: string;
   displayName: string;
   heldSeconds: number;
+  /** What the hold was measured against — a flow may shorten a pose's target. */
+  targetSeconds: number;
   /** False when the user skipped before reaching the target. */
   reachedTarget: boolean;
+}
+
+/**
+ * The landmarks from the frame a fault was at its worst, kept so the summary
+ * can show the user what their body was actually doing.
+ *
+ * 33 coordinates, never an image — which is what lets the app record this at
+ * all without breaking the promise on the landing page.
+ */
+export interface FormSnapshot {
+  poseId: string;
+  correction: string;
+  landmarks: PoseLandmark[];
+  jointColors: Record<string, string>;
 }
 
 export interface SessionSummary {
@@ -34,6 +50,10 @@ export interface SessionSummary {
   totalPoses: number;
   best: CompletedPose | null;
   toFixNext: CorrectionCount[];
+  startedAt: string;
+  endedAt: string;
+  /** One per distinct correction — the frame it was worst. */
+  snapshots: FormSnapshot[];
 }
 
 interface UseYogaFlowOptions {
@@ -42,10 +62,16 @@ interface UseYogaFlowOptions {
   setPose: (poseId: string) => void;
   speak: (text: string, opts?: { priority?: 'normal' | 'high'; dedupeMs?: number }) => void;
   onComplete?: (summary: SessionSummary) => void;
+  /**
+   * Reads the current frame's landmarks. Called only when a *new* correction
+   * takes over, so this runs a handful of times a session rather than at 12fps.
+   */
+  getLandmarks?: () => PoseLandmark[];
 }
 
 export interface YogaFlowController {
   active: boolean;
+  paused: boolean;
   phase: FlowPhase;
   stepIndex: number;
   totalSteps: number;
@@ -61,6 +87,8 @@ export interface YogaFlowController {
   start: () => void;
   stop: () => void;
   skip: () => void;
+  pause: () => void;
+  resume: () => void;
   /** Jump to a pose in single mode, or to a step in flow mode. */
   selectPose: (poseId: string) => void;
   buildSummary: () => SessionSummary;
@@ -84,6 +112,7 @@ export function useYogaFlow({
   setPose,
   speak,
   onComplete,
+  getLandmarks,
 }: UseYogaFlowOptions): YogaFlowController {
   const steps: ResolvedStep[] = useMemo(() => {
     if (config.mode === 'single') {
@@ -111,18 +140,24 @@ export function useYogaFlow({
   const [isInPose, setIsInPose] = useState(false);
   const [restRemaining, setRestRemaining] = useState(0);
   const [completed, setCompleted] = useState<CompletedPose[]>([]);
+  const [paused, setPaused] = useState(false);
 
   // Refs mirror state so the response-driven effect reads current values
   // without re-subscribing on every change (it runs at 12fps).
   const phaseRef = useRef<FlowPhase>('idle');
+  const activeRef = useRef(false);
   const stepIndexRef = useRef(0);
   const holdCueSpokenRef = useRef(false);
   const lastCountdownRef = useRef<number | null>(null);
   const completedRef = useRef<CompletedPose[]>([]);
   const tallyRef = useRef(new Map<string, CorrectionCount>());
   const lastCorrectionRef = useRef<string>('');
+  const startedAtRef = useRef<string>(new Date().toISOString());
+  // Keyed the same way as the tally, so a snapshot and its count stay paired.
+  const snapshotsRef = useRef(new Map<string, FormSnapshot>());
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { activeRef.current = active; }, [active]);
   useEffect(() => { stepIndexRef.current = stepIndex; }, [stepIndex]);
   useEffect(() => { completedRef.current = completed; }, [completed]);
 
@@ -146,6 +181,9 @@ export function useYogaFlow({
       totalPoses: steps.length,
       best,
       toFixNext: topCorrections(tallyRef.current, 3),
+      startedAt: startedAtRef.current,
+      endedAt: new Date().toISOString(),
+      snapshots: [...snapshotsRef.current.values()],
     };
   }, [steps.length]);
 
@@ -175,9 +213,12 @@ export function useYogaFlow({
 
   const start = useCallback(() => {
     setActive(true);
+    setPaused(false);
     setCompleted([]);
     completedRef.current = [];
     tallyRef.current = new Map();
+    snapshotsRef.current = new Map();
+    startedAtRef.current = new Date().toISOString();
     setStepIndex(0);
     stepIndexRef.current = 0;
     enterStep(0);
@@ -185,6 +226,7 @@ export function useYogaFlow({
 
   const stop = useCallback(() => {
     setActive(false);
+    setPaused(false);
     setPhase('idle');
     phaseRef.current = 'idle';
   }, []);
@@ -199,6 +241,7 @@ export function useYogaFlow({
           poseId: pose.id,
           displayName: pose.name,
           heldSeconds: Math.round(heldSeconds),
+          targetSeconds: step?.holdSeconds ?? pose.holdTargetSeconds,
           reachedTarget,
         };
         const updated = [...completedRef.current, entry];
@@ -222,6 +265,28 @@ export function useYogaFlow({
     },
     [steps, speak, onComplete, buildSummary]
   );
+
+  const pause = useCallback(() => {
+    if (!activeRef.current) return;
+    setPaused(true);
+  }, []);
+
+  /**
+   * Resuming restarts the current pose rather than continuing it.
+   *
+   * This is honest rather than convenient: HoldTimer is wall-clock on the
+   * server and drops a hold once the body has been absent for
+   * YOGA_HOLD_DEBOUNCE_FRAMES, so the hold is genuinely gone by the time
+   * anyone unpauses. Pretending otherwise would show a number the coach does
+   * not agree with. Pausing between poses costs nothing, which is the common
+   * case.
+   */
+  const resume = useCallback(() => {
+    setPaused(false);
+    if (phaseRef.current === 'holding' || phaseRef.current === 'setup') {
+      enterStep(stepIndexRef.current);
+    }
+  }, [enterStep]);
 
   const skip = useCallback(() => {
     if (!active) return;
@@ -251,16 +316,39 @@ export function useYogaFlow({
 
   // Drive setup -> holding -> done off each backend response.
   useEffect(() => {
-    if (!active || !response) return;
+    if (!active || !response || paused) return;
     const phaseNow = phaseRef.current;
     setIsInPose(response.is_in_pose);
     setHoldSeconds(response.hold_seconds);
 
     // Tally the leading correction once per episode, not once per frame — at
     // 12fps a 20s struggle would otherwise count as 240 occurrences.
-    const leading = response.corrections[0] ?? '';
+    /*
+     * "Step back so your whole body is in the camera frame" is not a form
+     * fault — it means the camera cannot see enough of the body to judge one.
+     * Tallying it would put a framing problem in "to fix next" and, worse,
+     * carry it into the long-term form trend as though the user's Tree Pose
+     * were getting worse when they simply stood too close.
+     */
+    const leading = isFramingProblem(response) ? '' : response.corrections[0] ?? '';
     if (leading && leading !== lastCorrectionRef.current && currentPose) {
       tallyCorrection(tallyRef.current, leading, currentPose.id, currentPose.name);
+
+      // Keep the frame this fault first appeared on. Only the first is stored
+      // per correction: later ones are the user already correcting, which is
+      // not the thing worth showing them.
+      const key = `${currentPose.id}::${leading}`;
+      if (!snapshotsRef.current.has(key)) {
+        const frame = getLandmarks?.();
+        if (frame?.length === 33) {
+          snapshotsRef.current.set(key, {
+            poseId: currentPose.id,
+            correction: leading,
+            landmarks: frame,
+            jointColors: response.joint_colors,
+          });
+        }
+      }
     }
     lastCorrectionRef.current = leading;
 
@@ -302,11 +390,11 @@ export function useYogaFlow({
         finishStep(response.hold_seconds, true);
       }
     }
-  }, [response, active, currentPose, desiredHoldSeconds, speak, finishStep]);
+  }, [response, active, paused, currentPose, desiredHoldSeconds, speak, finishStep, getLandmarks]);
 
   // Rest countdown between flow steps.
   useEffect(() => {
-    if (phase !== 'rest') return;
+    if (phase !== 'rest' || paused) return;
     if (restRemaining <= 0) {
       const nextIndex = stepIndexRef.current + 1;
       setStepIndex(nextIndex);
@@ -316,10 +404,11 @@ export function useYogaFlow({
     }
     const t = setTimeout(() => setRestRemaining((r) => r - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, restRemaining, enterStep]);
+  }, [phase, restRemaining, paused, enterStep]);
 
   return {
     active,
+    paused,
     phase,
     stepIndex,
     totalSteps: steps.length,
@@ -335,6 +424,8 @@ export function useYogaFlow({
     start,
     stop,
     skip,
+    pause,
+    resume,
     selectPose,
     buildSummary,
   };

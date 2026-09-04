@@ -5,6 +5,9 @@ import type { PoseLandmark, YogaResponse } from '@/lib/contracts/yoga';
 import { getYogaPose } from '@/lib/data/poses';
 import { JOINT_KEYS, JOINT_META, flagsFor, skeletonFor } from '@/lib/data/skeletons';
 
+/** When the scripted hold begins, shared with the resume rewind above. */
+const ADJUSTING_UNTIL_SECONDS = 6.5;
+
 export interface PreviewFrame {
   landmarks: PoseLandmark[];
   response: YogaResponse;
@@ -23,7 +26,11 @@ export interface PreviewFrame {
  * the session labels itself as a preview while it runs. A demo that silently
  * fakes its feedback would be worse than one that fails honestly.
  */
-export function usePreviewDriver(enabled: boolean, poseId: string): PreviewFrame | null {
+export function usePreviewDriver(
+  enabled: boolean,
+  poseId: string,
+  paused = false
+): PreviewFrame | null {
   const [frame, setFrame] = useState<PreviewFrame | null>(null);
   const startedAt = useRef<number>(0);
   const completedRef = useRef(false);
@@ -35,8 +42,28 @@ export function usePreviewDriver(enabled: boolean, poseId: string): PreviewFrame
     completedRef.current = false;
   }, [poseId, enabled]);
 
+  /*
+   * Mirror what pausing actually costs on the server.
+   *
+   * HoldTimer is wall-clock and drops a hold once the body has been absent
+   * past its debounce, so resuming a real session restarts the pose from
+   * zero. Letting the scripted clock run through a pause would make the
+   * preview disagree with the thing it exists to demonstrate.
+   */
+  const wasPaused = useRef(false);
   useEffect(() => {
-    if (!enabled) return;
+    // Only on an actual resume. Running this on mount too would skip the
+    // driver's opening framing and adjusting phases, so the session would
+    // never pass through the states the preview exists to show.
+    if (!paused && wasPaused.current) {
+      // Rewind to the moment the hold begins, so it restarts at zero.
+      startedAt.current = performance.now() - ADJUSTING_UNTIL_SECONDS * 1000;
+    }
+    wasPaused.current = paused;
+  }, [paused]);
+
+  useEffect(() => {
+    if (!enabled || paused) return;
 
     const pose = getYogaPose(poseId);
     if (!pose) return;
@@ -46,7 +73,7 @@ export function usePreviewDriver(enabled: boolean, poseId: string): PreviewFrame
     const flags = flagsFor(poseId);
 
     const FRAMING_UNTIL = 2.5;
-    const ADJUSTING_UNTIL = 6.5;
+    const ADJUSTING_UNTIL = ADJUSTING_UNTIL_SECONDS;
 
     const id = window.setInterval(() => {
       const elapsed = (performance.now() - startedAt.current) / 1000;
@@ -136,7 +163,7 @@ export function usePreviewDriver(enabled: boolean, poseId: string): PreviewFrame
     }, 1000 / 12);
 
     return () => window.clearInterval(id);
-  }, [enabled, poseId]);
+  }, [enabled, poseId, paused]);
 
   return enabled ? frame : null;
 }

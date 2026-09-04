@@ -30,6 +30,12 @@ interface PoseFigureProps {
   className?: string;
   /** Announced to screen readers; the figure is decorative without it. */
   label?: string;
+  /**
+   * Crops to the figure's own extents. A replayed frame occupies whatever
+   * slice of the coordinate space the body happened to fill, and the default
+   * square box letterboxes that into a fraction of the available height.
+   */
+  viewBox?: string;
 }
 
 /**
@@ -47,6 +53,7 @@ export function PoseFigure({
   ground = true,
   className,
   label,
+  viewBox = '0 0 100 100',
 }: PoseFigureProps) {
   const gradientId = useId().replace(/:/g, '');
   const points = skeleton ?? (poseId ? skeletonFor(poseId) : { ...BASE_SKELETON });
@@ -60,7 +67,7 @@ export function PoseFigure({
 
   return (
     <svg
-      viewBox="0 0 100 100"
+      viewBox={viewBox}
       preserveAspectRatio="xMidYMid meet"
       className={[styles.figure, className].filter(Boolean).join(' ')}
       role={label ? 'img' : 'presentation'}

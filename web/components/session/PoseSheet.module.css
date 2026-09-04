@@ -167,3 +167,56 @@
     padding: 26px 22px;
   }
 }
+
+/* The pose picker, moved here from the control bar. A grid of figures rather
+   than a row of word chips: at this size the shape tells you more than the
+   name, and it is the same figure the overlay will draw over your body. */
+.picker {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pickerItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: 8px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-neutral-100) 60%, transparent);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+.pickerItem:hover {
+  background: var(--color-accent-200);
+}
+.pickerItem[data-active='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-100);
+}
+
+.pickerFigure {
+  display: block;
+  width: 38px;
+  height: 38px;
+}
+
+.pickerName {
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--color-neutral-800);
+}
+
+.pickerHold {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-neutral-600);
+}
