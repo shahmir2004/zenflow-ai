@@ -29,16 +29,27 @@ export function useSpeech() {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     setSupported(true);
 
+    /*
+     * Ranked, because the installed voices differ enormously in quality and
+     * picking the first English one is how you end up with Microsoft Zira.
+     *
+     * "Natural" and "Neural" name the modern server-backed voices that Edge
+     * and Chrome expose on Windows; Google's network voices are the next best;
+     * Samantha is macOS's. Everything below that is a formant synthesiser from
+     * the 2000s, which is what "robotic" means in practice.
+     */
+    const RANKED = [/natural|neural/i, /google/i, /samantha|karen|moira/i, /female/i];
+
     const pickVoice = () => {
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
+      const english = voices.filter((v) => v.lang?.toLowerCase().startsWith('en'));
       voiceRef.current =
-        voices.find(
-          (v) =>
-            v.lang?.toLowerCase().startsWith('en') &&
-            /female|samantha|zira|google/i.test(v.name)
+        RANKED.reduce<SpeechSynthesisVoice | null>(
+          (found, pattern) => found ?? english.find((v) => pattern.test(v.name)) ?? null,
+          null
         ) ||
-        voices.find((v) => v.lang?.toLowerCase().startsWith('en')) ||
+        english[0] ||
         voices[0] ||
         null;
     };
@@ -81,7 +92,9 @@ export function useSpeech() {
 
     const utterance = new SpeechSynthesisUtterance(text);
     if (voiceRef.current) utterance.voice = voiceRef.current;
-    utterance.rate = 0.98;
+    // Matches the speed the clips in public/voice are rendered at, so dropping
+    // to this fallback changes the voice but not the pace of the session.
+    utterance.rate = 0.9;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     synth.speak(utterance);

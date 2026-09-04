@@ -79,16 +79,38 @@ export interface YogaPoseCatalog {
  */
 export const NOT_VISIBLE_VIOLATION = 'Body not fully visible';
 
+/**
+ * The body is inside the picture but cannot be read — turned away from the
+ * lens, poorly lit, or limbs hidden behind each other.
+ *
+ * This is a different problem from the one above and takes different advice.
+ * Telling someone to step back when they are already fully in shot sends them
+ * fixing the wrong thing, and they end up further away and no more readable.
+ */
+export const OCCLUDED_VIOLATION = 'Body not clearly visible';
+
 /** Below this, the backend's own docs say to treat feedback as unreliable. */
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 export function isFramingProblem(response: YogaResponse | null): boolean {
-  if (!response) return false;
-  if (response.violations.includes(NOT_VISIBLE_VIOLATION)) return true;
-  // An empty joint_colors map with an active pose means the same thing.
-  return (
+  return framingKind(response) !== null;
+}
+
+/** Which framing problem, if any — so the UI can give the matching advice. */
+export type FramingKind = 'out-of-frame' | 'unreadable';
+
+export function framingKind(response: YogaResponse | null): FramingKind | null {
+  if (!response) return null;
+  if (response.violations.includes(NOT_VISIBLE_VIOLATION)) return 'out-of-frame';
+  if (response.violations.includes(OCCLUDED_VIOLATION)) return 'unreadable';
+  // An empty joint_colors map with an active pose means the same thing. The
+  // cause is unknowable from here, so this takes the more cautious wording.
+  if (
     response.current_pose !== null &&
     Object.keys(response.joint_colors).length === 0 &&
     !response.is_in_pose
-  );
+  ) {
+    return 'unreadable';
+  }
+  return null;
 }

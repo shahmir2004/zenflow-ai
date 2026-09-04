@@ -16,6 +16,22 @@ a **front-facing** camera. Floor/inverted poses (Downward Dog, Cobra) need a
 **side** view and use deliberately lenient thresholds — phone-camera pose
 estimation of floor poses is noisy. Thresholds are class constants so they are
 easy to tune against real footage.
+
+Two kinds of joint
+------------------
+``required_joints`` are the joints without which the pose cannot be judged at
+all; losing one is a framing problem. ``preferred_joints`` are examined when
+visible and skipped when not.
+
+The split matters more than it sounds. Warrior II used to require twelve
+joints, wrists included, so a wrist flickering behind the torso invalidated an
+evaluation of the legs that was perfectly readable — and the user was told to
+step back when their stance was the thing being judged. Now the arms check
+simply does not run on the frames where the arms cannot be seen, and the lunge
+underneath it keeps being scored.
+
+Visibility itself is debounced in ``pipeline/framing.py``; see that module for
+why a single threshold on a single frame is the wrong question to ask.
 """
 
 from abc import ABC, abstractmethod
@@ -24,6 +40,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from config.settings import settings
+from pipeline.framing import FramingGate, VisibilityGate, is_out_of_frame
 
 from .base import (
     JointName,
@@ -32,8 +49,20 @@ from .base import (
     landmarks_to_dict,
 )
 
-# Joints below this visibility are treated as not reliably detected.
+# Kept for callers that still import it. The live thresholds are the enter/exit
+# pair in pipeline.framing — a single value is what caused the chatter.
 VISIBILITY_THRESHOLD = 0.3
+
+# The body is leaving the picture. Stepping back is the fix, and this exact
+# string is part of the client contract (lib/contracts/yoga.ts).
+OUT_OF_FRAME_VIOLATION = "Body not fully visible"
+OUT_OF_FRAME_CORRECTION = "Step back so your whole body is in the camera frame"
+
+# The body is inside the picture but cannot be read — turned away, poorly lit,
+# or limbs hidden behind each other. Stepping back does not help, so this says
+# something different.
+OCCLUDED_VIOLATION = "Body not clearly visible"
+OCCLUDED_CORRECTION = "Face the camera and make sure the room is bright enough"
 
 
 @dataclass
@@ -87,6 +116,23 @@ def _hip_pike_angle(lm: dict[JointName, Landmark], side: str) -> float:
     return calculate_angle(lm[JointName.RIGHT_SHOULDER], lm[JointName.RIGHT_HIP], lm[JointName.RIGHT_KNEE])
 
 
+# Joint groups the poses share, named so the required/preferred lists below read
+# as anatomy rather than as twelve enum members.
+_TORSO = (
+    JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
+    JointName.LEFT_HIP, JointName.RIGHT_HIP,
+)
+_LEGS = (
+    JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
+    JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
+)
+_ARMS = (
+    JointName.LEFT_ELBOW, JointName.RIGHT_ELBOW,
+    JointName.LEFT_WRIST, JointName.RIGHT_WRIST,
+)
+_WRISTS = (JointName.LEFT_WRIST, JointName.RIGHT_WRIST)
+
+
 # --------------------------------------------------------------------------- #
 # Base pose
 # --------------------------------------------------------------------------- #
@@ -96,6 +142,10 @@ class BaseYogaPose(ABC):
 
     Subclasses set the class metadata (``name``/``display_name``/``sanskrit``/
     ``camera_view``/``target_hold_seconds``) and implement :meth:`evaluate`.
+
+    Instances are stateful across frames — one lives per client for as long as
+    that client stays on the pose — because both visibility gates need history
+    to do their job.
     """
 
     name: str = "pose"
@@ -106,31 +156,71 @@ class BaseYogaPose(ABC):
     # any pose that does not specify its own target hold.
     target_hold_seconds: float = settings.YOGA_DEFAULT_HOLD_SECONDS
 
+    def __init__(self):
+        self._visibility = VisibilityGate()
+        self._framing = FramingGate()
+        # Assume everything is visible until a frame says otherwise, so calling
+        # evaluate() directly (as the unit tests do) behaves as it always has.
+        self._visible: set[JointName] = set(self.required_joints) | set(self.preferred_joints)
+
     @property
     @abstractmethod
     def required_joints(self) -> list[JointName]:
-        ...
+        """Joints without which this pose cannot be judged at all."""
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        """Joints that gate individual checks but never block the pose."""
+        return []
 
     @abstractmethod
     def evaluate(self, lm: dict[JointName, Landmark]) -> YogaEvaluation:
         ...
 
+    def _can(self, *joints: JointName) -> bool:
+        """Whether every one of these joints is readable on this frame."""
+        return all(j in self._visible for j in joints)
+
     # Shared frame entry point used by the YogaManager.
     def process_frame(self, landmarks: list[dict]) -> YogaEvaluation:
         lm = landmarks_to_dict(landmarks)
-        missing = [
-            j for j in self.required_joints
-            if j not in lm or lm[j].visibility < VISIBILITY_THRESHOLD
-        ]
-        if missing:
+
+        self._visible = {
+            joint
+            for joint in (*self.required_joints, *self.preferred_joints)
+            if joint in lm and self._visibility.update(joint.value, lm[joint].visibility)
+        }
+
+        missing = [j for j in self.required_joints if j not in self._visible]
+        # Only ask about joints we actually have coordinates for; a joint the
+        # payload omitted entirely is missing, not out of shot.
+        out_of_frame = any(
+            is_out_of_frame(lm[j].x, lm[j].y) for j in missing if j in lm
+        )
+        verdict = self._framing.update(readable=not missing, out_of_frame=out_of_frame)
+
+        if verdict.report:
             return YogaEvaluation(
                 is_in_pose=False,
-                violations=["Body not fully visible"],
-                corrections=["Step back so your whole body is in the camera frame"],
+                violations=[
+                    OUT_OF_FRAME_VIOLATION if verdict.out_of_frame else OCCLUDED_VIOLATION
+                ],
+                corrections=[
+                    OUT_OF_FRAME_CORRECTION if verdict.out_of_frame else OCCLUDED_CORRECTION
+                ],
                 joint_colors={},
                 confidence=0.0,
             )
+
         ev = self.evaluate(lm)
+
+        # Inside the gate's grace window the body is already unreadable, we
+        # simply have not said so yet. Score what is visible, but never confirm
+        # a pose on the strength of the checks that happened to run — the hold
+        # timer's own debounce covers a blip this short.
+        if missing:
+            ev.is_in_pose = False
+
         if ev.confidence <= 0.0:
             ev.confidence = self._visibility_confidence(lm)
         return ev
@@ -140,7 +230,9 @@ class BaseYogaPose(ABC):
         return float(sum(vis) / len(vis)) if vis else 0.0
 
     def _green(self) -> dict[str, str]:
-        return {j.value: "green" for j in self.required_joints}
+        """Green for every joint being read — never for one we cannot see."""
+        joints = self._visible or set(self.required_joints)
+        return {j.value: "green" for j in joints}
 
 
 # --------------------------------------------------------------------------- #
@@ -160,37 +252,34 @@ class MountainPose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
-        left_knee = _knee_angle(lm, "left")
-        right_knee = _knee_angle(lm, "right")
-        if left_knee < self.MIN_LEG_STRAIGHT or right_knee < self.MIN_LEG_STRAIGHT:
-            v.append("Knees are bent")
-            c.append("Straighten your legs and stand tall")
-            jc[JointName.LEFT_KNEE.value] = "yellow"
-            jc[JointName.RIGHT_KNEE.value] = "yellow"
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            left_knee = _knee_angle(lm, "left")
+            right_knee = _knee_angle(lm, "right")
+            if left_knee < self.MIN_LEG_STRAIGHT or right_knee < self.MIN_LEG_STRAIGHT:
+                v.append("Knees are bent")
+                c.append("Straighten your legs and stand tall")
+                jc[JointName.LEFT_KNEE.value] = "yellow"
+                jc[JointName.RIGHT_KNEE.value] = "yellow"
 
-        torso = _angle_from_vertical(
-            _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
-            _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
-        )
-        if torso > self.MAX_TORSO_TILT:
-            v.append("Leaning to one side")
-            c.append("Stack your shoulders over your hips and stand straight")
-            jc[JointName.LEFT_SHOULDER.value] = "yellow"
-            jc[JointName.RIGHT_SHOULDER.value] = "yellow"
+        if self._can(*_TORSO):
+            torso = _angle_from_vertical(
+                _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
+                _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
+            )
+            if torso > self.MAX_TORSO_TILT:
+                v.append("Leaning to one side")
+                c.append("Stack your shoulders over your hips and stand straight")
+                jc[JointName.LEFT_SHOULDER.value] = "yellow"
+                jc[JointName.RIGHT_SHOULDER.value] = "yellow"
 
-        if abs(lm[JointName.LEFT_SHOULDER].y - lm[JointName.RIGHT_SHOULDER].y) > self.MAX_SHOULDER_UNLEVEL:
-            v.append("Shoulders are uneven")
-            c.append("Level your shoulders")
+            if abs(lm[JointName.LEFT_SHOULDER].y - lm[JointName.RIGHT_SHOULDER].y) > self.MAX_SHOULDER_UNLEVEL:
+                v.append("Shoulders are uneven")
+                c.append("Level your shoulders")
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -208,43 +297,40 @@ class TreePose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
-        la = lm[JointName.LEFT_ANKLE]
-        ra = lm[JointName.RIGHT_ANKLE]
-        # The standing foot is the lower one (larger y); the other should be lifted.
-        foot_lift = abs(la.y - ra.y)
-        lifted = foot_lift > self.MIN_FOOT_LIFT
-        if not lifted:
-            v.append("Both feet are on the ground")
-            c.append("Lift one foot and place the sole on your inner thigh or calf")
-            jc[JointName.LEFT_ANKLE.value] = "yellow"
-            jc[JointName.RIGHT_ANKLE.value] = "yellow"
-        else:
-            # Standing leg should be straight.
-            standing = "left" if la.y > ra.y else "right"
-            if _knee_angle(lm, standing) < self.STANDING_LEG_STRAIGHT:
-                v.append("Standing leg is bent")
-                c.append("Straighten and root down through your standing leg")
-                jc[(JointName.LEFT_KNEE if standing == "left" else JointName.RIGHT_KNEE).value] = "yellow"
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            la = lm[JointName.LEFT_ANKLE]
+            ra = lm[JointName.RIGHT_ANKLE]
+            # The standing foot is the lower one (larger y); the other should be lifted.
+            foot_lift = abs(la.y - ra.y)
+            lifted = foot_lift > self.MIN_FOOT_LIFT
+            if not lifted:
+                v.append("Both feet are on the ground")
+                c.append("Lift one foot and place the sole on your inner thigh or calf")
+                jc[JointName.LEFT_ANKLE.value] = "yellow"
+                jc[JointName.RIGHT_ANKLE.value] = "yellow"
+            else:
+                # Standing leg should be straight.
+                standing = "left" if la.y > ra.y else "right"
+                if _knee_angle(lm, standing) < self.STANDING_LEG_STRAIGHT:
+                    v.append("Standing leg is bent")
+                    c.append("Straighten and root down through your standing leg")
+                    jc[(JointName.LEFT_KNEE if standing == "left" else JointName.RIGHT_KNEE).value] = "yellow"
 
-        torso = _angle_from_vertical(
-            _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
-            _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
-        )
-        if torso > self.MAX_TORSO_TILT:
-            v.append("Losing balance")
-            c.append("Engage your core and fix your gaze on one point")
-            jc[JointName.LEFT_SHOULDER.value] = "yellow"
-            jc[JointName.RIGHT_SHOULDER.value] = "yellow"
+        if self._can(*_TORSO):
+            torso = _angle_from_vertical(
+                _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
+                _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
+            )
+            if torso > self.MAX_TORSO_TILT:
+                v.append("Losing balance")
+                c.append("Engage your core and fix your gaze on one point")
+                jc[JointName.LEFT_SHOULDER.value] = "yellow"
+                jc[JointName.RIGHT_SHOULDER.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -252,7 +338,9 @@ class TreePose(BaseYogaPose):
 class _LungeArmsPose(BaseYogaPose):
     """Shared base for Warrior I / II: a bent front knee + straight back leg.
 
-    Subclasses differ only in the required arm position.
+    Subclasses differ only in the required arm position. The arms are
+    *preferred* rather than required: the lunge is the pose, and it stays
+    scoreable on frames where a wrist disappears behind the torso.
     """
 
     FRONT_KNEE_MIN = 80.0
@@ -262,37 +350,36 @@ class _LungeArmsPose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_ELBOW, JointName.RIGHT_ELBOW,
-            JointName.LEFT_WRIST, JointName.RIGHT_WRIST,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        return [*_ARMS]
 
     def _check_lunge(self, lm, v, c, jc) -> None:
-        left_knee = _knee_angle(lm, "left")
-        right_knee = _knee_angle(lm, "right")
-        bent = min(left_knee, right_knee)
-        straight = max(left_knee, right_knee)
-        front_side = "left" if left_knee < right_knee else "right"
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            left_knee = _knee_angle(lm, "left")
+            right_knee = _knee_angle(lm, "right")
+            bent = min(left_knee, right_knee)
+            straight = max(left_knee, right_knee)
+            front_side = "left" if left_knee < right_knee else "right"
 
-        if not (self.FRONT_KNEE_MIN <= bent <= self.FRONT_KNEE_MAX):
-            v.append("Front knee not bent correctly")
-            c.append("Bend your front knee to about 90 degrees, stacked over the ankle")
-            jc[(JointName.LEFT_KNEE if front_side == "left" else JointName.RIGHT_KNEE).value] = "red"
-        if straight < self.BACK_LEG_STRAIGHT:
-            v.append("Back leg is bent")
-            c.append("Straighten and press through your back leg")
+            if not (self.FRONT_KNEE_MIN <= bent <= self.FRONT_KNEE_MAX):
+                v.append("Front knee not bent correctly")
+                c.append("Bend your front knee to about 90 degrees, stacked over the ankle")
+                jc[(JointName.LEFT_KNEE if front_side == "left" else JointName.RIGHT_KNEE).value] = "red"
+            if straight < self.BACK_LEG_STRAIGHT:
+                v.append("Back leg is bent")
+                c.append("Straighten and press through your back leg")
 
-        torso = _angle_from_vertical(
-            _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
-            _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
-        )
-        if torso > self.MAX_TORSO_TILT:
-            v.append("Torso leaning too far")
-            c.append("Lift your chest and keep your torso upright")
+        if self._can(*_TORSO):
+            torso = _angle_from_vertical(
+                _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
+                _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
+            )
+            if torso > self.MAX_TORSO_TILT:
+                v.append("Torso leaning too far")
+                c.append("Lift your chest and keep your torso upright")
 
 
 class WarriorIPose(_LungeArmsPose):
@@ -307,13 +394,14 @@ class WarriorIPose(_LungeArmsPose):
         self._check_lunge(lm, v, c, jc)
 
         # Arms reach overhead: both wrists above the shoulders.
-        ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
-        lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
-        if not (lw.y < ls.y and rw.y < rs.y):
-            v.append("Arms not raised overhead")
-            c.append("Reach both arms straight up alongside your ears")
-            jc[JointName.LEFT_WRIST.value] = "yellow"
-            jc[JointName.RIGHT_WRIST.value] = "yellow"
+        if self._can(*_WRISTS, JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER):
+            ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
+            lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
+            if not (lw.y < ls.y and rw.y < rs.y):
+                v.append("Arms not raised overhead")
+                c.append("Reach both arms straight up alongside your ears")
+                jc[JointName.LEFT_WRIST.value] = "yellow"
+                jc[JointName.RIGHT_WRIST.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -332,16 +420,17 @@ class WarriorIIPose(_LungeArmsPose):
         v, c, jc = [], [], self._green()
         self._check_lunge(lm, v, c, jc)
 
-        ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
-        lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
-        arms_level = (abs(lw.y - ls.y) < self.ARM_LEVEL_TOLERANCE
-                      and abs(rw.y - rs.y) < self.ARM_LEVEL_TOLERANCE)
-        arms_wide = abs(lw.x - rw.x) > self.MIN_ARM_SPAN
-        if not (arms_level and arms_wide):
-            v.append("Arms not extended out to the sides")
-            c.append("Extend both arms parallel to the floor, reaching out wide")
-            jc[JointName.LEFT_WRIST.value] = "yellow"
-            jc[JointName.RIGHT_WRIST.value] = "yellow"
+        if self._can(*_WRISTS, JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER):
+            ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
+            lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
+            arms_level = (abs(lw.y - ls.y) < self.ARM_LEVEL_TOLERANCE
+                          and abs(rw.y - rs.y) < self.ARM_LEVEL_TOLERANCE)
+            arms_wide = abs(lw.x - rw.x) > self.MIN_ARM_SPAN
+            if not (arms_level and arms_wide):
+                v.append("Arms not extended out to the sides")
+                c.append("Extend both arms parallel to the floor, reaching out wide")
+                jc[JointName.LEFT_WRIST.value] = "yellow"
+                jc[JointName.RIGHT_WRIST.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -358,36 +447,36 @@ class ChairPose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_WRIST, JointName.RIGHT_WRIST,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        return [*_WRISTS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
-        left_knee = _knee_angle(lm, "left")
-        right_knee = _knee_angle(lm, "right")
-        both_bent = (
-            self.KNEE_BENT_MIN <= left_knee <= self.KNEE_BENT_MAX
-            and self.KNEE_BENT_MIN <= right_knee <= self.KNEE_BENT_MAX
-        )
-        if not both_bent:
-            v.append("Knees not bent enough")
-            c.append("Bend your knees and sit your hips back as if into a chair")
-            jc[JointName.LEFT_KNEE.value] = "red"
-            jc[JointName.RIGHT_KNEE.value] = "red"
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            left_knee = _knee_angle(lm, "left")
+            right_knee = _knee_angle(lm, "right")
+            both_bent = (
+                self.KNEE_BENT_MIN <= left_knee <= self.KNEE_BENT_MAX
+                and self.KNEE_BENT_MIN <= right_knee <= self.KNEE_BENT_MAX
+            )
+            if not both_bent:
+                v.append("Knees not bent enough")
+                c.append("Bend your knees and sit your hips back as if into a chair")
+                jc[JointName.LEFT_KNEE.value] = "red"
+                jc[JointName.RIGHT_KNEE.value] = "red"
 
-        ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
-        lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
-        if not (lw.y < ls.y and rw.y < rs.y):
-            v.append("Arms not raised")
-            c.append("Reach your arms up alongside your ears")
-            jc[JointName.LEFT_WRIST.value] = "yellow"
-            jc[JointName.RIGHT_WRIST.value] = "yellow"
+        if self._can(*_WRISTS, JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER):
+            ls, rs = lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]
+            lw, rw = lm[JointName.LEFT_WRIST], lm[JointName.RIGHT_WRIST]
+            if not (lw.y < ls.y and rw.y < rs.y):
+                v.append("Arms not raised")
+                c.append("Reach your arms up alongside your ears")
+                jc[JointName.LEFT_WRIST.value] = "yellow"
+                jc[JointName.RIGHT_WRIST.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -405,38 +494,39 @@ class TrianglePose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_WRIST, JointName.RIGHT_WRIST,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        return [*_WRISTS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
-        if _knee_angle(lm, "left") < self.LEG_STRAIGHT or _knee_angle(lm, "right") < self.LEG_STRAIGHT:
-            v.append("Legs are bent")
-            c.append("Straighten both legs in your wide stance")
-            jc[JointName.LEFT_KNEE.value] = "yellow"
-            jc[JointName.RIGHT_KNEE.value] = "yellow"
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            if _knee_angle(lm, "left") < self.LEG_STRAIGHT or _knee_angle(lm, "right") < self.LEG_STRAIGHT:
+                v.append("Legs are bent")
+                c.append("Straighten both legs in your wide stance")
+                jc[JointName.LEFT_KNEE.value] = "yellow"
+                jc[JointName.RIGHT_KNEE.value] = "yellow"
 
-        torso = _angle_from_vertical(
-            _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
-            _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
-        )
-        if torso < self.MIN_LATERAL_TILT:
-            v.append("Not hinging sideways")
-            c.append("Hinge sideways from your hip, reaching one hand down")
-            jc[JointName.LEFT_SHOULDER.value] = "yellow"
-            jc[JointName.RIGHT_SHOULDER.value] = "yellow"
+        if self._can(*_TORSO):
+            torso = _angle_from_vertical(
+                _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER]),
+                _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP]),
+            )
+            if torso < self.MIN_LATERAL_TILT:
+                v.append("Not hinging sideways")
+                c.append("Hinge sideways from your hip, reaching one hand down")
+                jc[JointName.LEFT_SHOULDER.value] = "yellow"
+                jc[JointName.RIGHT_SHOULDER.value] = "yellow"
 
-        if abs(lm[JointName.LEFT_WRIST].y - lm[JointName.RIGHT_WRIST].y) < self.MIN_ARM_VERTICAL_GAP:
-            v.append("Arms not in a vertical line")
-            c.append("Stack your top arm over the bottom, forming one straight line")
-            jc[JointName.LEFT_WRIST.value] = "yellow"
-            jc[JointName.RIGHT_WRIST.value] = "yellow"
+        if self._can(*_WRISTS):
+            if abs(lm[JointName.LEFT_WRIST].y - lm[JointName.RIGHT_WRIST].y) < self.MIN_ARM_VERTICAL_GAP:
+                v.append("Arms not in a vertical line")
+                c.append("Stack your top arm over the bottom, forming one straight line")
+                jc[JointName.LEFT_WRIST.value] = "yellow"
+                jc[JointName.RIGHT_WRIST.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -460,44 +550,45 @@ class DownwardDogPose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_ELBOW, JointName.RIGHT_ELBOW,
-            JointName.LEFT_WRIST, JointName.RIGHT_WRIST,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        return [*_TORSO, *_LEGS]
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        return [*_ARMS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
         hip_y = _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP])[1]
         shoulder_y = _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER])[1]
-        ankle_y = _mid(lm[JointName.LEFT_ANKLE], lm[JointName.RIGHT_ANKLE])[1]
-        hips_highest = (hip_y < shoulder_y - self.HIPS_ABOVE) and (hip_y < ankle_y - self.HIPS_ABOVE)
-        if not hips_highest:
-            v.append("Hips not lifted")
-            c.append("Lift your hips up and back to make an upside-down V")
-            jc[JointName.LEFT_HIP.value] = "red"
-            jc[JointName.RIGHT_HIP.value] = "red"
 
-        if _elbow_angle(lm, "left") < self.ARM_STRAIGHT or _elbow_angle(lm, "right") < self.ARM_STRAIGHT:
-            v.append("Arms are bent")
-            c.append("Press the floor away and straighten your arms")
-            jc[JointName.LEFT_ELBOW.value] = "yellow"
-            jc[JointName.RIGHT_ELBOW.value] = "yellow"
+        if self._can(*_TORSO, JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE):
+            ankle_y = _mid(lm[JointName.LEFT_ANKLE], lm[JointName.RIGHT_ANKLE])[1]
+            hips_highest = (hip_y < shoulder_y - self.HIPS_ABOVE) and (hip_y < ankle_y - self.HIPS_ABOVE)
+            if not hips_highest:
+                v.append("Hips not lifted")
+                c.append("Lift your hips up and back to make an upside-down V")
+                jc[JointName.LEFT_HIP.value] = "red"
+                jc[JointName.RIGHT_HIP.value] = "red"
 
-        if _knee_angle(lm, "left") < self.LEG_STRAIGHT or _knee_angle(lm, "right") < self.LEG_STRAIGHT:
-            v.append("Knees are bent")
-            c.append("Straighten your legs, sending your heels toward the floor")
-            jc[JointName.LEFT_KNEE.value] = "yellow"
-            jc[JointName.RIGHT_KNEE.value] = "yellow"
+        if self._can(*_ARMS, JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER):
+            if _elbow_angle(lm, "left") < self.ARM_STRAIGHT or _elbow_angle(lm, "right") < self.ARM_STRAIGHT:
+                v.append("Arms are bent")
+                c.append("Press the floor away and straighten your arms")
+                jc[JointName.LEFT_ELBOW.value] = "yellow"
+                jc[JointName.RIGHT_ELBOW.value] = "yellow"
 
-        pike = (_hip_pike_angle(lm, "left") + _hip_pike_angle(lm, "right")) / 2.0
-        if not (self.PIKE_MIN <= pike <= self.PIKE_MAX):
-            v.append("Body angle is off")
-            c.append("Form a clear peak at the hips between your arms and legs")
+        if self._can(*_LEGS, JointName.LEFT_HIP, JointName.RIGHT_HIP):
+            if _knee_angle(lm, "left") < self.LEG_STRAIGHT or _knee_angle(lm, "right") < self.LEG_STRAIGHT:
+                v.append("Knees are bent")
+                c.append("Straighten your legs, sending your heels toward the floor")
+                jc[JointName.LEFT_KNEE.value] = "yellow"
+                jc[JointName.RIGHT_KNEE.value] = "yellow"
+
+            pike = (_hip_pike_angle(lm, "left") + _hip_pike_angle(lm, "right")) / 2.0
+            if not (self.PIKE_MIN <= pike <= self.PIKE_MAX):
+                v.append("Body angle is off")
+                c.append("Form a clear peak at the hips between your arms and legs")
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)
 
@@ -515,19 +606,19 @@ class CobraPose(BaseYogaPose):
 
     @property
     def required_joints(self) -> list[JointName]:
-        return [
-            JointName.LEFT_SHOULDER, JointName.RIGHT_SHOULDER,
-            JointName.LEFT_HIP, JointName.RIGHT_HIP,
-            JointName.LEFT_KNEE, JointName.RIGHT_KNEE,
-            JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE,
-        ]
+        # Lying down, the feet are the first thing to leave a phone's frame and
+        # the chest lift — the pose itself — does not need them.
+        return [*_TORSO]
+
+    @property
+    def preferred_joints(self) -> list[JointName]:
+        return [*_LEGS]
 
     def evaluate(self, lm):
         v, c, jc = [], [], self._green()
 
         shoulder_y = _mid(lm[JointName.LEFT_SHOULDER], lm[JointName.RIGHT_SHOULDER])[1]
         hip_y = _mid(lm[JointName.LEFT_HIP], lm[JointName.RIGHT_HIP])[1]
-        ankle_y = _mid(lm[JointName.LEFT_ANKLE], lm[JointName.RIGHT_ANKLE])[1]
 
         if not (hip_y - shoulder_y > self.MIN_CHEST_LIFT):
             v.append("Chest not lifted")
@@ -535,11 +626,13 @@ class CobraPose(BaseYogaPose):
             jc[JointName.LEFT_SHOULDER.value] = "red"
             jc[JointName.RIGHT_SHOULDER.value] = "red"
 
-        lower_body_on_floor = abs(hip_y - ankle_y) < self.MAX_BODY_TILT and hip_y > self.FLOOR_Y
-        if not lower_body_on_floor:
-            v.append("Hips lifting off the floor")
-            c.append("Keep your hips and the tops of your thighs grounded")
-            jc[JointName.LEFT_HIP.value] = "yellow"
-            jc[JointName.RIGHT_HIP.value] = "yellow"
+        if self._can(JointName.LEFT_ANKLE, JointName.RIGHT_ANKLE):
+            ankle_y = _mid(lm[JointName.LEFT_ANKLE], lm[JointName.RIGHT_ANKLE])[1]
+            lower_body_on_floor = abs(hip_y - ankle_y) < self.MAX_BODY_TILT and hip_y > self.FLOOR_Y
+            if not lower_body_on_floor:
+                v.append("Hips lifting off the floor")
+                c.append("Keep your hips and the tops of your thighs grounded")
+                jc[JointName.LEFT_HIP.value] = "yellow"
+                jc[JointName.RIGHT_HIP.value] = "yellow"
 
         return YogaEvaluation(is_in_pose=not v, violations=v, corrections=c, joint_colors=jc)

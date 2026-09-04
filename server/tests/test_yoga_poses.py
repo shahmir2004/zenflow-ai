@@ -7,11 +7,19 @@ a violation and a flagged joint color).
 
 import pytest
 
+from exercises.yoga_poses import (
+    OCCLUDED_CORRECTION,
+    OCCLUDED_VIOLATION,
+    OUT_OF_FRAME_CORRECTION,
+    OUT_OF_FRAME_VIOLATION,
+)
 from exercises.yoga_registry import (
     SUPPORTED_YOGA_LABELS,
     YOGA_POSE_MODULES,
     supported_yoga_payload,
 )
+from pipeline.framing import BAD_FRAMES as FRAMING_BAD_FRAMES
+from pipeline.framing import GOOD_FRAMES as FRAMING_GOOD_FRAMES
 
 
 def _skeleton(joints: dict[int, tuple[float, float]]) -> list[dict]:
@@ -129,14 +137,139 @@ def test_wrong_pose_is_rejected(label):
     assert any(color in ("red", "yellow") for color in ev.joint_colors.values())
 
 
-def test_low_visibility_is_not_in_pose():
+def _feed(pose, lms, frames):
+    """Run the same frame through a pose N times and return the last result."""
+    ev = None
+    for _ in range(frames):
+        ev = pose.process_frame(lms)
+    return ev
+
+
+def _hide(lms, *indices, visibility=0.05):
+    lms = [dict(lm) for lm in lms]
+    for idx in indices:
+        lms[idx]["visibility"] = visibility
+    return lms
+
+
+# --------------------------------------------------------------------------- #
+# Framing: when a joint cannot be seen
+# --------------------------------------------------------------------------- #
+
+def test_low_visibility_is_never_in_pose():
+    """Safety first: an unreadable body must not start a hold, ever — even on
+    the very first frame, before the framing gate has decided to say anything.
+    """
+    pose = YOGA_POSE_MODULES["mountain"]()
+    ev = pose.process_frame(_hide(_skeleton(MOUNTAIN_OK), 25, 26, 27, 28))
+    assert not ev.is_in_pose
+
+
+def test_a_brief_visibility_blip_is_not_announced():
+    """The fix for the nagging. A drop shorter than the gate's run says nothing
+    at all — no violation, no correction, nothing for the UI to flash up.
+    """
     pose = YOGA_POSE_MODULES["mountain"]()
     lms = _skeleton(MOUNTAIN_OK)
-    for idx in (25, 26, 27, 28):  # hide the legs
-        lms[idx]["visibility"] = 0.1
-    ev = pose.process_frame(lms)
+    pose.process_frame(lms)  # a clean frame first
+    ev = _feed(pose, _hide(lms, 25, 26, 27, 28), FRAMING_BAD_FRAMES - 1)
+    assert ev.violations == []
+    assert ev.corrections == []
     assert not ev.is_in_pose
-    assert ev.violations
+
+
+def test_sustained_occlusion_asks_the_user_to_face_the_camera():
+    """A body that is inside the picture but unreadable must not be told to
+    step back — stepping back is not the fix and doing as told makes it worse.
+    """
+    pose = YOGA_POSE_MODULES["mountain"]()
+    lms = _skeleton(MOUNTAIN_OK)  # every joint well inside 0..1
+    ev = _feed(pose, _hide(lms, 25, 26, 27, 28), FRAMING_BAD_FRAMES)
+    assert ev.violations == [OCCLUDED_VIOLATION]
+    assert ev.corrections == [OCCLUDED_CORRECTION]
+    assert not ev.is_in_pose
+
+
+def test_a_body_leaving_the_picture_is_told_to_step_back():
+    pose = YOGA_POSE_MODULES["mountain"]()
+    lms = _hide(_skeleton(MOUNTAIN_OK), 27, 28)
+    for idx in (27, 28):  # ankles predicted below the bottom edge
+        lms[idx]["y"] = 1.3
+    ev = _feed(pose, lms, FRAMING_BAD_FRAMES)
+    assert ev.violations == [OUT_OF_FRAME_VIOLATION]
+    assert ev.corrections == [OUT_OF_FRAME_CORRECTION]
+
+
+def test_framing_clears_once_the_body_comes_back():
+    pose = YOGA_POSE_MODULES["mountain"]()
+    lms = _skeleton(MOUNTAIN_OK)
+    assert _feed(pose, _hide(lms, 25, 26, 27, 28), FRAMING_BAD_FRAMES).violations
+    recovered = _feed(pose, lms, FRAMING_GOOD_FRAMES)
+    assert recovered.violations == []
+    assert recovered.is_in_pose
+
+
+def test_flickering_visibility_never_reports_a_framing_problem():
+    """The original bug, reproduced. An ankle scoring either side of the old
+    0.30 threshold used to flip the cue on and off several times a second.
+    """
+    pose = YOGA_POSE_MODULES["tree"]()
+    lms = _skeleton(TREE_OK)
+    pose.process_frame(lms)
+    for score in [0.25, 0.35, 0.22, 0.33, 0.28, 0.31] * 4:
+        ev = pose.process_frame(_hide(lms, 28, visibility=score))
+        assert ev.violations == [] or OCCLUDED_VIOLATION not in ev.violations
+
+
+# --------------------------------------------------------------------------- #
+# Required vs preferred joints
+# --------------------------------------------------------------------------- #
+
+def test_warrior_ii_still_scores_the_lunge_when_the_wrists_vanish():
+    """The headline fix.
+
+    A wrist disappearing behind the torso used to invalidate an evaluation of
+    the legs that was perfectly readable. The arms check is now skipped on
+    those frames and the lunge underneath it keeps being scored — so a correct
+    stance keeps its hold instead of being told to step back.
+
+    The trade-off is deliberate: with the wrists unreadable we cannot know the
+    arms are wrong, and we choose to keep timing the pose rather than stop it.
+    """
+    pose = YOGA_POSE_MODULES["warrior_ii"]()
+    arms_down = _skeleton(WARRIOR2_BAD)          # legs correct, arms lowered
+    assert not pose.process_frame(arms_down).is_in_pose
+
+    ev = _feed(pose, _hide(arms_down, 15, 16), FRAMING_BAD_FRAMES + 2)
+    assert ev.violations == []
+    assert ev.is_in_pose
+
+
+def test_warrior_ii_still_flags_the_arms_when_it_can_see_them():
+    """The control for the test above: preferred joints are skipped when
+    unreadable, not ignored when present."""
+    pose = YOGA_POSE_MODULES["warrior_ii"]()
+    ev = pose.process_frame(_skeleton(WARRIOR2_BAD))
+    assert "Arms not extended out to the sides" in ev.violations
+
+
+def test_cobra_does_not_need_the_ankles():
+    """Lying down, the feet are the first thing to leave a phone's frame — and
+    the chest lift, which is the pose, does not need them."""
+    pose = YOGA_POSE_MODULES["cobra"]()
+    ev = _feed(pose, _hide(_skeleton(COBRA_OK), 27, 28), FRAMING_BAD_FRAMES + 2)
+    assert ev.violations == []
+    assert ev.is_in_pose
+
+
+def test_an_unseen_joint_is_never_coloured_green():
+    """joint_colors drives the skeleton overlay. Painting a joint green is a
+    claim that it was checked and passed."""
+    pose = YOGA_POSE_MODULES["warrior_ii"]()
+    ev = _feed(pose, _hide(_skeleton(WARRIOR2_OK), 15, 16), FRAMING_BAD_FRAMES + 2)
+    assert "left_wrist" not in ev.joint_colors
+    assert "right_wrist" not in ev.joint_colors
+    assert ev.joint_colors["left_knee"] == "green"
 
 
 def test_registry_has_exactly_eight_poses():
@@ -151,3 +284,42 @@ def test_registry_has_exactly_eight_poses():
     for entry in payload:
         assert entry["camera_view"] in ("front", "side")
         assert entry["target_hold_seconds"] > 0
+
+
+# --------------------------------------------------------------------------- #
+# The two debounces, composed
+# --------------------------------------------------------------------------- #
+
+def test_a_blip_keeps_the_hold_and_says_nothing():
+    """The property a user actually feels.
+
+    Two debounces stack here and they are tuned to stack in this order:
+    the framing gate stays quiet for BAD_FRAMES, and the hold timer tolerates
+    YOGA_HOLD_DEBOUNCE_FRAMES of absence before dropping a hold. With the
+    framing window the shorter of the two, a blip short enough to be silent is
+    also short enough to keep the hold — so the user is never told to step back
+    *and* robbed of their twenty seconds for the same flicker.
+    """
+    from config.settings import settings
+    from state_machine.yoga_manager import YogaManager
+
+    assert FRAMING_BAD_FRAMES < settings.YOGA_HOLD_DEBOUNCE_FRAMES
+
+    manager = YogaManager()
+    assert manager.set_pose("mountain")
+
+    good = _skeleton(MOUNTAIN_OK)
+    for _ in range(6):
+        state = manager.process_frame(good)
+    assert state.is_in_pose
+    held = state.hold_seconds
+    assert held > 0
+
+    blip = _hide(good, 25, 26, 27, 28)
+    for _ in range(FRAMING_BAD_FRAMES - 1):
+        state = manager.process_frame(blip)
+        assert state.violations == []
+
+    state = manager.process_frame(good)
+    assert state.is_in_pose
+    assert state.hold_seconds >= held, "the blip should not have reset the hold"

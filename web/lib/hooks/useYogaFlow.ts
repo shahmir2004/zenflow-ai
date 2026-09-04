@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isFramingProblem, type PoseLandmark, type YogaResponse } from '@/lib/contracts/yoga';
 import { getYogaPose, type YogaPose } from '@/lib/data/poses';
+import { poseIntro } from '@/lib/voice/lines';
 import { stepHoldSeconds, type YogaFlow } from '@/lib/data/flows';
 import {
   advancePhase,
@@ -152,6 +153,9 @@ export function useYogaFlow({
   const completedRef = useRef<CompletedPose[]>([]);
   const tallyRef = useRef(new Map<string, CorrectionCount>());
   const lastCorrectionRef = useRef<string>('');
+  // Latched while a framing problem persists, so it is spoken once per episode
+  // rather than once every dedupe window.
+  const framingSpokenRef = useRef(false);
   const startedAtRef = useRef<string>(new Date().toISOString());
   // Keyed the same way as the tally, so a snapshot and its count stay paired.
   const snapshotsRef = useRef(new Map<string, FormSnapshot>());
@@ -203,9 +207,11 @@ export function useYogaFlow({
       setPose(step.poseId);
 
       if (pose) {
-        const intro =
-          (index === 0 ? '' : 'Next pose. ') + `${pose.name}. ` + pose.setupSteps.join(' ');
-        speak(intro, { priority: 'high' });
+        // poseIntro, not a template literal built here: the renderer uses the
+        // same function to decide what audio to produce, and an introduction
+        // that differs by one word is a cache miss that drops this pose back
+        // to the robotic voice.
+        speak(poseIntro(pose.name, pose.setupSteps, index === 0), { priority: 'high' });
       }
     },
     [steps, setPose, speak]
@@ -330,7 +336,29 @@ export function useYogaFlow({
      * carry it into the long-term form trend as though the user's Tree Pose
      * were getting worse when they simply stood too close.
      */
-    const leading = isFramingProblem(response) ? '' : response.corrections[0] ?? '';
+    /*
+     * Framing is said once and then left alone.
+     *
+     * It is not a fault the user can work on mid-pose — it is a fact about
+     * where they are standing and how the room is lit — so repeating it every
+     * five seconds for as long as it is true does not help them fix it, it
+     * just talks over the practice. Say it, then let the dashed box on screen
+     * carry it until something changes.
+     */
+    const framing = isFramingProblem(response);
+    if (!framing) framingSpokenRef.current = false;
+
+    const announce = (text: string) => {
+      if (!framing) {
+        speak(text);
+        return;
+      }
+      if (framingSpokenRef.current) return;
+      framingSpokenRef.current = true;
+      speak(text, { priority: 'high' });
+    };
+
+    const leading = framing ? '' : response.corrections[0] ?? '';
     if (leading && leading !== lastCorrectionRef.current && currentPose) {
       tallyCorrection(tallyRef.current, leading, currentPose.id, currentPose.name);
 
@@ -361,8 +389,8 @@ export function useYogaFlow({
         setPhase('holding');
         phaseRef.current = 'holding';
       } else if (response.correction_message) {
-        // Coach them into position. De-duped inside useSpeech.
-        speak(response.correction_message);
+        // Coach them into position. De-duped inside the speech layer.
+        announce(response.correction_message);
       }
       return;
     }
@@ -373,7 +401,7 @@ export function useYogaFlow({
         setPhase('setup');
         phaseRef.current = 'setup';
         holdCueSpokenRef.current = false;
-        if (response.correction_message) speak(response.correction_message);
+        if (response.correction_message) announce(response.correction_message);
         return;
       }
 

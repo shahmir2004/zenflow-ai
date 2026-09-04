@@ -1,0 +1,13 @@
+{
+  "name": "zenflow-voice-tools",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only. Renders the app's fixed spoken lines to audio with Kokoro-82M. Deliberately NOT part of web/package.json — onnxruntime is ~200MB and Vercel installs devDependencies during a build.",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "kokoro-js": "^1.2.1"
+  }
+}

@@ -73,6 +73,62 @@ needs no server configuration.
 no camera and no backend. It is the fastest way to see the session view, and it
 labels itself as a preview rather than pretending to be real feedback.
 
+## The voice
+
+The coach's script is a **closed set**. Every pose introduction, hold cue,
+transition and correction is fixed before the app ships, and the only numbers
+spoken are the last three seconds of a hold — around sixty utterances in total.
+
+So they are rendered once, offline, with
+[Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX)
+(Apache 2.0) and committed as ~2MB of AAC. The app plays audio files. There is
+no model download, no API key, no per-play cost, no network, and the voice is
+identical every time — none of which is true of either browser speech synthesis
+(free, instant, sounds like a train announcement) or an in-browser neural model
+(90MB before it says a word).
+
+```bash
+cd tools/voice
+npm install            # onnxruntime — deliberately not a devDependency of web/
+npm run render         # writes web/public/voice/*.m4a + manifest.json
+```
+
+[`web/lib/hooks/useVoice.ts`](web/lib/hooks/useVoice.ts) plays a clip when one
+exists and **falls back to the Web Speech API when one does not** — so a tree
+with no audio rendered, or a line edited without re-running the renderer,
+behaves exactly as the app did before this existed rather than going silent.
+
+`tools/voice/render.mjs` imports the script from
+[`web/lib/voice/lines.ts`](web/lib/voice/lines.ts) under plain Node, so the app
+and the renderer cannot disagree about what to say. A vitest case reads the
+Python source and asserts every correction the server can emit has a clip; that
+is the test that catches the otherwise invisible failure, where one reworded
+line quietly drops back to the robotic voice while everything around it sounds
+fine.
+
+## Two kinds of joint
+
+`required_joints` are the joints without which a pose cannot be judged at all.
+`preferred_joints` are checked when visible and skipped when not.
+
+Warrior II used to require twelve joints, wrists included, so a wrist flickering
+behind the torso invalidated an evaluation of the legs that was perfectly
+readable — and told the user to step back when their stance was the thing being
+judged. Tree Pose was worse: it required both ankles, and the entire point of
+the pose is to tuck one foot behind the standing leg.
+
+Visibility itself is debounced twice over in
+[`server/pipeline/framing.py`](server/pipeline/framing.py) — a Schmitt trigger
+per joint so a score hovering near the threshold settles instead of chattering,
+and a run of consecutive bad frames before anything is said at all. The two
+causes are also separated, because they take opposite advice: a body leaving
+the picture is fixed by stepping back, and a body that is fully in shot but
+unreadable is not.
+
+The cue is spoken **once** per episode. It is a fact about the room, not a fault
+the user can work on mid-pose, and repeating it every five seconds for as long
+as it stays true is what made the coach feel like a nag.
+
 ## The eight poses
 
 | Pose | Sanskrit | Camera | Hold |
@@ -98,8 +154,8 @@ asserts it, and the app re-checks against the live catalog in development.
 ## Testing
 
 ```bash
-cd server && pytest -q     # pose detection, hold timing, WebSocket, extraction guards
-cd web && npm test         # catalog parity
+cd server && pytest -q     # pose detection, framing gates, hold timing, WebSocket
+cd web && npm test         # catalog parity, voice-script parity with the server
 cd web && npm run build    # type-checks as it builds
 ```
 

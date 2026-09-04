@@ -8,7 +8,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import { config } from '@/lib/config';
 import {
   LOW_CONFIDENCE_THRESHOLD,
+  framingKind,
   isFramingProblem,
+  type FramingKind,
   type PoseLandmark,
   type YogaResponse,
 } from '@/lib/contracts/yoga';
@@ -17,7 +19,7 @@ import { defaultFlow, getYogaFlow, type YogaFlow } from '@/lib/data/flows';
 import { useCamera } from '@/lib/hooks/useCamera';
 import { usePoseDetection } from '@/lib/hooks/usePoseDetection';
 import { useYogaWebSocket } from '@/lib/hooks/useYogaWebSocket';
-import { useSpeech } from '@/lib/hooks/useSpeech';
+import { useVoice } from '@/lib/hooks/useVoice';
 import { useChime } from '@/lib/hooks/useChime';
 import { useBackendWarmup } from '@/lib/hooks/useBackendWarmup';
 import { usePersisted, STORAGE_KEYS } from '@/lib/hooks/usePersisted';
@@ -111,7 +113,14 @@ export function LiveSession({
 
   const warmup = useBackendWarmup(!preview);
   const camera = useCamera(videoRef);
-  const { speak, cancel: cancelSpeech, setMuted, supported: voiceSupported } = useSpeech();
+  const {
+    speak,
+    cancel: cancelSpeech,
+    prime: primeVoice,
+    prefetch: prefetchVoice,
+    setMuted,
+    supported: voiceSupported,
+  } = useVoice();
   const { chime, unlock: unlockAudio } = useChime();
 
   // The speech hook owns muting so a toggle silences mid-utterance.
@@ -256,7 +265,8 @@ export function LiveSession({
   const currentPose =
     flow.currentPose ?? getYogaPose(singlePoseId) ?? YOGA_POSES[0];
 
-  const framingProblem = isFramingProblem(lastResponse);
+  const framing = framingKind(lastResponse);
+  const framingProblem = framing !== null;
   const lowConfidence =
     !framingProblem &&
     lastResponse !== null &&
@@ -266,7 +276,7 @@ export function LiveSession({
 
   const { cueKind, cueMessage } = deriveCue({
     response: lastResponse,
-    framingProblem,
+    framing,
     resting: flow.phase === 'rest',
     paused: flow.paused,
     pausedPoseName: flow.currentPose?.name ?? null,
@@ -333,10 +343,15 @@ export function LiveSession({
   }, [flow, resetSave]);
 
   const handleStartCamera = useCallback(() => {
-    // Unlock audio inside the click so the chime can play later without one.
+    // Unlock audio inside the click so the chime and the coach can play later
+    // without one. A yoga session is hands-free by definition — there is no
+    // second gesture coming.
     unlockAudio();
+    primeVoice();
+    // ~2MB of rendered speech, warmed now so no cue ever waits on the network.
+    prefetchVoice();
     void camera.start();
-  }, [camera, unlockAudio]);
+  }, [camera, unlockAudio, primeVoice, prefetchVoice]);
 
   const gateVisible = !preview && !camera.isReady;
 
@@ -383,7 +398,7 @@ export function LiveSession({
           )}
 
           <FramingHint
-            active={framingProblem}
+            kind={framing}
             lowConfidence={lowConfidence}
             confidence={lastResponse?.confidence ?? 0}
           />
@@ -528,7 +543,7 @@ function usePersistedPose(initial?: string) {
  */
 function deriveCue(args: {
   response: YogaResponse | null;
-  framingProblem: boolean;
+  framing: FramingKind | null;
   resting: boolean;
   restRemaining: number;
   nextPoseName: string | null;
@@ -537,7 +552,7 @@ function deriveCue(args: {
   pausedPoseName: string | null;
 }): { cueKind: CueKind; cueMessage: string } {
   const {
-    response, framingProblem, resting, restRemaining, nextPoseName, countdown,
+    response, framing, resting, restRemaining, nextPoseName, countdown,
     paused, pausedPoseName,
   } = args;
 
@@ -571,10 +586,23 @@ function deriveCue(args: {
     };
   }
 
-  if (framingProblem) {
+  /*
+   * Two different problems, two different fixes. A body that is fully in shot
+   * but unreadable — turned away, or in a dim room — gains nothing from
+   * stepping back, and someone who does as they are told ends up further away
+   * and no easier to see.
+   */
+  if (framing === 'out-of-frame') {
     return {
       cueKind: 'framing',
       cueMessage: 'Step back so your whole body is in the frame.',
+    };
+  }
+
+  if (framing === 'unreadable') {
+    return {
+      cueKind: 'framing',
+      cueMessage: 'Turn to face the camera, and check the light in the room.',
     };
   }
 
